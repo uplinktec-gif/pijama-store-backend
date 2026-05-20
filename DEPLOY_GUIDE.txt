@@ -1,0 +1,101 @@
+GUIA DE DEPLOY - PRODUCAO
+=========================
+
+PRE-REQUISITOS:
+- Node.js v18+ (ou superior)
+- npm v9+
+- Credenciais: Google Sheets, WhatsApp, Claude API
+- VPS Hostinger ou PC 24/7
+
+PASSO 1: VARIAVEIS DE AMBIENTE
+==============================
+1. Copiar: cp .env.example .env
+2. Editar .env com valores REAIS:
+   - GOOGLE_SHEETS_ID
+   - GOOGLE_SHEETS_CREDENTIALS_PATH
+   - WHATSAPP_PHONE_NUMBER_ID
+   - WHATSAPP_ACCESS_TOKEN
+   - WHATSAPP_VERIFY_TOKEN
+   - ANTHROPIC_API_KEY
+   - AUTHORIZED_WHATSAPP_NUMBERS=5595988123456,5595987654321
+3. Colocar service-account.json na raiz do projeto
+
+PASSO 2: PREPARAR SISTEMA
+=========================
+1. npm ci (instalar dependencias exatas)
+2. mkdir -p logs backups
+3. npm run dev (testar localmente)
+
+PASSO 3: DEPLOY NO VPS ou PC
+============================
+OPCAO A: VPS Hostinger
+- ssh usuario@seu_ip
+- curl https://deb.nodesource.com/setup_20.x | sudo bash
+- sudo apt-get install nodejs
+- git clone seu_repo (ou copiar files)
+- npm ci
+- Copiar .env e service-account.json
+- Instalar PM2: npm install -g pm2
+
+OPCAO B: PC Local
+- Copiar pasta do projeto
+- npm ci
+- Configurar .env com valores reais
+
+PASSO 4: MANTER RODANDO 24/7
+=============================
+OPCAO A: PM2 (Recomendado)
+1. npm install -g pm2
+2. Criar ecosystem.config.js:
+   apps: [{
+     name: 'pijama-store',
+     script: './server.js',
+     instances: 1,
+     autorestart: true
+   }]
+3. pm2 start ecosystem.config.js
+4. pm2 startup
+5. pm2 save
+
+OPCAO B: Supervisor
+1. sudo apt-get install supervisor
+2. Criar config em /etc/supervisor/conf.d/pijama-store.conf
+3. supervisorctl reread && supervisorctl update
+
+PASSO 5: TESTAR INTEGRACAO
+===========================
+1. curl http://localhost:3000/api/estoque
+2. curl "http://localhost:3000/api/backup/latest?whatsapp=5595988123456"
+3. Enviar mensagem WhatsApp: "2 zara g bordo 150 pra joao"
+4. Verificar resposta em < 10 segundos
+5. Verificar backup criado: ls -lh backups/
+
+PASSO 6: MONITORAR
+==================
+1. pm2 logs pijama-store (ver logs tempo real)
+2. pm2 monit (ver CPU/RAM)
+3. tail -f logs/combined-YYYY-MM-DD.log (logs do app)
+
+CHECKLIST FINAL
+===============
+[ ] Node.js v18+ instalado
+[ ] npm ci executado
+[ ] .env com valores REAIS
+[ ] service-account.json no lugar
+[ ] Servidor inicia sem erros
+[ ] APIs retornam dados
+[ ] WhatsApp responde
+[ ] PM2/Supervisor configurado
+[ ] Logs aparecendo
+[ ] Backup funcionando
+
+TROUBLESHOOTING
+===============
+Porta 3000 em uso: mudar PORT em .env
+Modulo nao encontrado: npm ci
+Google Sheets 401: validar service-account.json
+Claude API erro: verificar ANTHROPIC_API_KEY
+WhatsApp nao responde: ver logs, validar webhook
+
+STATUS: PRODUCTION-READY
+Data: 18 de Maio de 2026

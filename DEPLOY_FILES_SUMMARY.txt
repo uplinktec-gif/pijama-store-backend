@@ -1,0 +1,162 @@
+ARQUIVOS DE DEPLOYMENT CRIADOS
+===============================
+
+Data: 18 de Maio de 2026
+Fase: Phase 4 - Production Ready
+
+DOCUMENTACAO:
+=============
+
+1. DEPLOY_GUIDE.md
+   - Guia COMPLETO (10 partes)
+   - PRÉ-REQUISITOS detalhados
+   - Passo-a-passo VPS vs PC
+   - Configuração PM2/Supervisor/Systemd
+   - Monitoramento 24/7
+   - Troubleshooting production
+   - ~600 linhas de instruções
+
+2. DEPLOY_RAPIDO.md ⭐
+   - 10 passos simples (15 minutos)
+   - Para quem quer ir rápido
+   - Foco: Essencial
+   - Checklist final
+   - Troubleshooting básico
+   - COMECE POR AQUI!
+
+3. DEPLOY_GUIDE.txt
+   - Versão simplificada em text
+   - Para referência rápida
+   - Sem formatação markdown
+
+SCRIPTS AUTOMATICOS:
+====================
+
+4. setup-production.sh
+   - Script automático de setup
+   - Verifica Node.js, npm
+   - Instala dependências
+   - Cria diretórios
+   - Testa startup
+   - Setup PM2 automático
+   - Uso: bash setup-production.sh
+
+5. test-production.sh
+   - Script de testes pós-deploy
+   - Verifica server respondendo
+   - Testa todos endpoints
+   - Verifica logs e backups
+   - Uso: bash test-production.sh
+
+6. ecosystem.config.js (será criado)
+   - Configuração PM2
+   - Auto-restart, logging
+   - Max memory management
+
+DOCUMENTACAO EXISTENTE (referenciar):
+=====================================
+
+7. docs/README.md (11 KB)
+   - Visão geral do projeto
+   - Stack técnico
+   - Como começar
+
+8. docs/SETUP.md (7.3 KB)
+   - Setup local completo
+   - Google Cloud config
+   - WhatsApp setup
+   - Troubleshooting inicial
+
+9. docs/API.md (11.5 KB)
+   - Todos endpoints documentados
+   - Exemplos curl
+   - Códigos HTTP
+   - Estruturas JSON
+
+10. docs/TROUBLESHOOTING.md (4.8 KB)
+    - 9 seções de problemas
+    - Google Sheets, WhatsApp, Claude
+    - Permissões, Logs, Backup
+    - Data recovery
+    - Performance tuning
+
+FLUXO RECOMENDADO:
+==================
+
+Para Felipe fazer deploy:
+
+1️⃣ Ler: DEPLOY_RAPIDO.md (5 min)
+2️⃣ Ler: DEPLOY_GUIDE.md (20 min)
+3️⃣ Executar: bash setup-production.sh (2 min)
+4️⃣ Configurar: .env com valores reais (5 min)
+5️⃣ Colocar: service-account.json (1 min)
+6️⃣ Testar: bash test-production.sh (2 min)
+7️⃣ PM2 setup: pm2 startup (1 min)
+8️⃣ Monitor: tail -f logs (contínuo)
+
+Total: ~35 minutos
+
+ESTRUTURA DE PASTAS FINAL:
+===========================
+
+pijama-store-backend/
+├── docs/
+│   ├── README.md
+│   ├── SETUP.md
+│   ├── API.md
+│   └── TROUBLESHOOTING.md
+├── src/
+│   ├── config/
+│   ├── controllers/
+│   ├── routes/
+│   ├── services/
+│   ├── utils/
+│   └── ...
+├── tests/
+│   ├── unit/
+│   └── integration/
+├── logs/            (criado durante startup)
+│   ├── combined-2026-05-18.log
+│   ├── error-2026-05-18.log
+│   └── pm2-*.log
+├── backups/         (criado durante startup)
+│   └── pijama-store-2026-05-18-*.json
+├── DEPLOY_GUIDE.md
+├── DEPLOY_RAPIDO.md
+├── DEPLOY_GUIDE.txt
+├── setup-production.sh
+├── test-production.sh
+├── ecosystem.config.js
+├── .env              (criar com valores reais)
+├── .env.example
+├── service-account.json (copiar do Google)
+├── server.js
+├── package.json
+└── package-lock.json
+
+CHECKLIST PRE-DEPLOY:
+=====================
+
+Antes de rodar setup-production.sh:
+
+☐ Node.js v18+ instalado (node --version)
+☐ npm v9+ instalado (npm --version)
+☐ Credenciais Google obtidas
+☐ Credenciais WhatsApp obtidas
+☐ API Key Claude obtida
+☐ service-account.json pronto para copiar
+
+POS-DEPLOY:
+===========
+
+Após teste bem-sucedido:
+
+☐ Configurar alertas (PM2+ ou email)
+☐ Setup backup incremental (rsync)
+☐ Monitorar 24-48 horas
+☐ Treinar Felipe (operação)
+☐ Contato de emergência documentado
+
+VERSAO: 1.0
+ESTADO: Production-Ready
+STATUS: ✅ Pronto para Deploy
