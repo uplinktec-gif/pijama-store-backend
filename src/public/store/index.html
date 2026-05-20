@@ -226,13 +226,6 @@ footer strong { color: white; }
 .skeleton { background: linear-gradient(90deg, var(--bg2) 25%, var(--border) 50%, var(--bg2) 75%); background-size: 200% 100%; animation: shimmer 1.4s infinite; border-radius: 8px; }
 @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 
-/* IMAGE LOADER SPINNER */
-.img-loader { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 5; }
-.spinner { width: 40px; height: 40px; border: 3px solid rgba(0,0,0,.1); border-top-color: #b8996d; border-radius: 50%; animation: spin 0.8s linear infinite; }
-@keyframes spin { to { transform: rotate(360deg); } }
-.img-loading { position: relative; display: flex; align-items: center; justify-content: center; background: var(--bg2); }
-.img-loading .spinner { width: 36px; height: 36px; border-width: 3px; }
-
 @media (max-width: 768px) {
   .cart-drawer { width: 100%; }
   nav { display: none; }
@@ -298,9 +291,8 @@ footer strong { color: white; }
   <div class="modal" style="position:relative">
     <button class="modal-close" onclick="closeProductModal()">×</button>
     <div class="modal-inner">
-      <div class="modal-gallery img-loading" id="modal-img-wrap">
-        <div class="img-loader"><div class="spinner"></div></div>
-        <img id="pm-img" src="" alt="" onload="document.getElementById('modal-img-wrap').classList.remove('img-loading')" onerror="document.getElementById('modal-img-wrap').classList.remove('img-loading')">
+      <div class="modal-gallery" id="modal-img-wrap">
+        <img id="pm-img" src="" alt="">
         <button class="gallery-arrow gallery-prev" id="gallery-prev" onclick="changeGalleryPhoto(-1)">‹</button>
         <button class="gallery-arrow gallery-next" id="gallery-next" onclick="changeGalleryPhoto(1)">›</button>
         <div class="gallery-dots" id="gallery-dots"></div>
@@ -674,7 +666,6 @@ function cardNav(e, id, dir) {
   const state = cardCarousel[id];
   if (!state || state.photos.length <= 1) return;
   state.idx = (state.idx + dir + state.photos.length) % state.photos.length;
-  document.getElementById(`card-wrap-${id}`).classList.add('img-loading');
   document.getElementById(`card-img-${id}`).src = state.photos[state.idx];
   document.querySelectorAll(`#card-dots-${id} .card-dot`).forEach((d, i) => d.classList.toggle('active', i === state.idx));
 }
@@ -685,7 +676,7 @@ function renderProductGrid() {
     const photos = getCardPhotos(p.id);
     cardCarousel[p.id] = { idx: 0, photos };
     const dots = photos.length > 1
-      ? `<div class="card-dots" id="card-dots-${p.id}">${photos.map((_, i) => `<div class="card-dot${i===0?' active':''}" onclick="cardNav(event,'${p.id}',0);cardCarousel['${p.id}'].idx=${i};document.getElementById('card-wrap-${p.id}').classList.add('img-loading');document.getElementById('card-img-${p.id}').src=cardCarousel['${p.id}'].photos[${i}];document.querySelectorAll('#card-dots-${p.id} .card-dot').forEach((d,j)=>d.classList.toggle('active',j===${i}))"></div>`).join('')}</div>`
+      ? `<div class="card-dots" id="card-dots-${p.id}">${photos.map((_, i) => `<div class="card-dot${i===0?' active':''}" onclick="cardNav(event,'${p.id}',0);cardCarousel['${p.id}'].idx=${i};document.getElementById('card-img-${p.id}').src=cardCarousel['${p.id}'].photos[${i}];document.querySelectorAll('#card-dots-${p.id} .card-dot').forEach((d,j)=>d.classList.toggle('active',j===${i}))"></div>`).join('')}</div>`
       : '';
     const arrows = photos.length > 1
       ? `<button class="card-arrow card-arrow-left" onclick="cardNav(event,'${p.id}',-1)">‹</button>
@@ -693,9 +684,8 @@ function renderProductGrid() {
       : '';
     return `
     <div class="product-card" onclick="openProduct('${p.id}')">
-      <div class="card-img-wrap img-loading" id="card-wrap-${p.id}">
-        <div class="img-loader"><div class="spinner"></div></div>
-        <img class="product-img" id="card-img-${p.id}" src="${photos[0]||''}" alt="${p.nome}" loading="lazy" onload="document.getElementById('card-wrap-${p.id}').classList.remove('img-loading')" onerror="document.getElementById('card-wrap-${p.id}').classList.remove('img-loading')">
+      <div class="card-img-wrap" id="card-wrap-${p.id}">
+        <img class="product-img" id="card-img-${p.id}" src="${photos[0]||''}" alt="${p.nome}" loading="lazy">
         ${arrows}${dots}
       </div>
       <div class="product-info">
@@ -740,7 +730,6 @@ function openProduct(id) {
   selectedColor = null;
   selectedQty = 1;
 
-  document.getElementById('modal-img-wrap').classList.add('img-loading');
   document.getElementById('pm-img').src = getDefaultImg(p.id);
   document.getElementById('pm-img').alt = p.nome + ' ' + p.sub;
   document.getElementById('pm-tag').textContent = p.tag;
@@ -882,7 +871,6 @@ function changeGalleryPhoto(delta) {
   const ids = (PRODUCT_CORES[currentProduct.id] || {})[selectedColor];
   if (!Array.isArray(ids) || ids.length <= 1) return;
   currentGalleryIdx = (currentGalleryIdx + delta + ids.length) % ids.length;
-  document.getElementById('modal-img-wrap').classList.add('img-loading');
   document.getElementById('pm-img').src = GDR(ids[currentGalleryIdx]);
   updateGalleryControls(ids);
 }
@@ -892,7 +880,6 @@ function jumpGallery(idx) {
   const ids = (PRODUCT_CORES[currentProduct.id] || {})[selectedColor];
   if (!Array.isArray(ids)) return;
   currentGalleryIdx = idx;
-  document.getElementById('modal-img-wrap').classList.add('img-loading');
   document.getElementById('pm-img').src = GDR(ids[idx]);
   updateGalleryControls(ids);
 }
