@@ -85,10 +85,10 @@ app.get('/portal', (req, res) => {
 
 // Favicon para todo o site (raiz)
 app.get('/favicon.svg', (req, res) => {
-  res.sendFile(`${__dirname}/public/favicon.svg`);
+  res.sendFile(`${dirname(__dirname)}/public/favicon.svg`);
 });
 app.get('/favicon.ico', (req, res) => {
-  res.sendFile(`${__dirname}/public/favicon.svg`);
+  res.sendFile(`${dirname(__dirname)}/public/favicon.svg`);
 });
 
 // 404 handler
