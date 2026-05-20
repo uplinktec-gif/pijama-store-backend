@@ -2,23 +2,46 @@ import express from 'express';
 import 'dotenv/config';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import session from 'express-session';
+import passport from 'passport';
 import { logger } from './utils/logger.js';
+import { configurarGoogleOAuth } from './config/google-oauth.js';
 import * as webhookController from './controllers/webhook.controller.js';
 import apiRoutes from './routes/api.routes.js';
 import dashboardRoutes from './routes/dashboard.routes.js';
 import adminRoutes from './routes/admin.routes.js';
 import storeRoutes from './routes/store.routes.js';
 import clienteRoutes from './routes/cliente.routes.js';
+import authRoutes from './routes/auth.routes.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const app = express();
 
+// Configurar Google OAuth
+configurarGoogleOAuth();
+
 // Middleware
 app.use(express.json({
   limit: '10mb'
 }));
+
+// Session middleware (para Google OAuth)
+app.use(session({
+  secret: process.env.CLIENTE_SESSION_SECRET || 'pluma-session-secret-2025',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: process.env.NODE_ENV === 'production', // HTTPS em produção
+    httpOnly: true,
+    maxAge: 24 * 60 * 60 * 1000 // 24 horas
+  }
+}));
+
+// Passport middleware
+app.use(passport.initialize());
+app.use(passport.session());
 
 // Logging middleware
 app.use((req, res, next) => {
@@ -52,6 +75,9 @@ app.get('/api/test', (req, res) => {
 // WhatsApp webhook
 app.post('/api/webhook/whatsapp', webhookController.receberMensagem);
 app.get('/api/webhook/whatsapp', webhookController.verificarWebhook);
+
+// Autenticação (CPF e Google OAuth)
+app.use('/auth', authRoutes);
 
 // API routes
 app.use('/api', apiRoutes);
