@@ -226,6 +226,9 @@ footer strong { color: white; }
 .skeleton { background: linear-gradient(90deg, var(--bg2) 25%, var(--border) 50%, var(--bg2) 75%); background-size: 200% 100%; animation: shimmer 1.4s infinite; border-radius: 8px; }
 @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 
+/* IMAGE LOADING STATE */
+.img-loading { background: #f9f9f9; }
+
 @media (max-width: 768px) {
   .cart-drawer { width: 100%; }
   nav { display: none; }
@@ -291,8 +294,8 @@ footer strong { color: white; }
   <div class="modal" style="position:relative">
     <button class="modal-close" onclick="closeProductModal()">×</button>
     <div class="modal-inner">
-      <div class="modal-gallery" id="modal-img-wrap">
-        <img id="pm-img" src="" alt="">
+      <div class="modal-gallery img-loading" id="modal-img-wrap">
+        <img id="pm-img" src="" alt="" onload="document.getElementById('modal-img-wrap').classList.remove('img-loading')" onerror="document.getElementById('modal-img-wrap').classList.remove('img-loading')">
         <button class="gallery-arrow gallery-prev" id="gallery-prev" onclick="changeGalleryPhoto(-1)">‹</button>
         <button class="gallery-arrow gallery-next" id="gallery-next" onclick="changeGalleryPhoto(1)">›</button>
         <div class="gallery-dots" id="gallery-dots"></div>
@@ -730,6 +733,7 @@ function openProduct(id) {
   selectedColor = null;
   selectedQty = 1;
 
+  document.getElementById('modal-img-wrap').classList.add('img-loading');
   document.getElementById('pm-img').src = getDefaultImg(p.id);
   document.getElementById('pm-img').alt = p.nome + ' ' + p.sub;
   document.getElementById('pm-tag').textContent = p.tag;
@@ -871,6 +875,7 @@ function changeGalleryPhoto(delta) {
   const ids = (PRODUCT_CORES[currentProduct.id] || {})[selectedColor];
   if (!Array.isArray(ids) || ids.length <= 1) return;
   currentGalleryIdx = (currentGalleryIdx + delta + ids.length) % ids.length;
+  document.getElementById('modal-img-wrap').classList.add('img-loading');
   document.getElementById('pm-img').src = GDR(ids[currentGalleryIdx]);
   updateGalleryControls(ids);
 }
@@ -880,6 +885,7 @@ function jumpGallery(idx) {
   const ids = (PRODUCT_CORES[currentProduct.id] || {})[selectedColor];
   if (!Array.isArray(ids)) return;
   currentGalleryIdx = idx;
+  document.getElementById('modal-img-wrap').classList.add('img-loading');
   document.getElementById('pm-img').src = GDR(ids[idx]);
   updateGalleryControls(ids);
 }
