@@ -202,14 +202,20 @@ async function analisarEstoque() {
       if (diasRestantes <= 3) {
         alertas.push({
           tipo: 'URGENTE',
-          produto: `${produto.MODELO} ${produto.COR}`,
+          modelo: produto.MODELO,
+          tamanho: produto.TAMANHO || 'N/A',
+          cor: produto.COR || 'N/A',
+          produto: `${produto.MODELO} ${produto.TAMANHO} ${produto.COR}`,
           disponivel,
           diasRestantes
         });
       } else if (diasRestantes <= 7) {
         alertas.push({
           tipo: 'AVISO',
-          produto: `${produto.MODELO} ${produto.COR}`,
+          modelo: produto.MODELO,
+          tamanho: produto.TAMANHO || 'N/A',
+          cor: produto.COR || 'N/A',
+          produto: `${produto.MODELO} ${produto.TAMANHO} ${produto.COR}`,
           disponivel,
           diasRestantes
         });

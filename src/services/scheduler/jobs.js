@@ -12,6 +12,9 @@ import { obterRoleUsuario, temPermissao } from '../../config/users.js';
 const NUMERO_FELIPE = process.env.NUMERO_FELIPE || '+5595988123456';
 const NUMERO_JULLY = process.env.NUMERO_JULLY || '+5595987654321';
 
+// Set para rastrear jobs já agendados (evitar duplicação)
+const jobsAgendados = new Set();
+
 /**
  * Agenda relatório diário às 18h para Felipe
  */
@@ -82,12 +85,12 @@ function agendarAlertasEstoque() {
 
       // Verificar itens zerados diretamente do estoque
       const todosItens = await estoqueSheets.readAllEstoque();
-      const itensZerados = todosItens.filter(i => i.quantidade_disponivel === 0 && (i.status || '').toLowerCase() === 'ativo');
+      const itensZerados = todosItens.filter(i => i.QUANTIDADE_DISPONIVEL === 0 && (i.STATUS || '').toLowerCase() === 'ativo');
 
       if (itensZerados.length > 0) {
-        let mensagemZerados = `🚨 *SEM ESTOQUE!*\n\nOs seguintes itens estão zerados:\n`;
+        let mensagemZerados = `🚨 *SEM ESTOQUE!*\n\nOs seguintes itens estão zerados:\n\n`;
         itensZerados.slice(0, 10).forEach(i => {
-          mensagemZerados += `• ${i.modelo} ${i.tamanho} ${i.cor}\n`;
+          mensagemZerados += `❌ *${i.MODELO}*\n   Tamanho: ${i.TAMANHO}\n   Cor: ${i.COR}\n\n`;
         });
         await senderService.enviarMensagem(NUMERO_FELIPE, mensagemZerados);
       }
@@ -96,25 +99,27 @@ function agendarAlertasEstoque() {
       const alertasUrgentes = estoque.alertas.filter(a => a.tipo === 'URGENTE');
       const avisos = estoque.alertas.filter(a => a.tipo === 'AVISO');
 
-      let mensagem = `⚠️ ALERTAS DE ESTOQUE\n\n`;
+      let mensagem = `⚠️ *ALERTAS DE ESTOQUE*\n\n`;
 
       if (alertasUrgentes.length > 0) {
-        mensagem += `🔴 URGENTE (encomendar HOJE):\n`;
+        mensagem += `🔴 *URGENTE (encomendar HOJE):*\n`;
         alertasUrgentes.slice(0, 5).forEach(a => {
-          mensagem += `   • ${a.produto}: ${a.disponivel} un (${a.diasRestantes} dias)\n`;
+          mensagem += `   📦 *${a.modelo}* (${a.tamanho} / ${a.cor})\n`;
+          mensagem += `       ${a.disponivel} un • ${a.diasRestantes} dias restantes\n`;
         });
         mensagem += `\n`;
       }
 
       if (avisos.length > 0) {
-        mensagem += `🟡 AVISO (encomendar essa semana):\n`;
+        mensagem += `🟡 *AVISO (encomendar essa semana):*\n`;
         avisos.slice(0, 5).forEach(a => {
-          mensagem += `   • ${a.produto}: ${a.disponivel} un (${a.diasRestantes} dias)\n`;
+          mensagem += `   📦 *${a.modelo}* (${a.tamanho} / ${a.cor})\n`;
+          mensagem += `       ${a.disponivel} un • ${a.diasRestantes} dias restantes\n`;
         });
       }
 
       await senderService.enviarMensagem(NUMERO_FELIPE, mensagem);
-      logger.info('✓ Alerta de estoque enviado para Felipe');
+      logger.info('✓ Alertas de estoque enviados para Felipe');
     } catch (error) {
       logger.error('Erro ao enviar alerta de estoque:', error.message);
     }
@@ -299,49 +304,73 @@ function agendarRelatorioSemanal() {
 }
 
 /**
- * Inicializa todos os jobs agendados
+ * Inicializa todos os jobs agendados (com proteção contra duplicação)
  */
 function inicializarScheduler() {
   try {
     logger.info('⏰ Inicializando scheduler de tarefas automáticas');
 
+    // Se jobs já foram agendados, não agendar novamente
+    if (jobsAgendados.size > 0) {
+      logger.warn('⚠️ Scheduler já foi inicializado. Ignorando chamada duplicada.');
+      return [];
+    }
+
     const jobs = [];
 
     // Agendar relatório diário às 18h
-    jobs.push({
-      nome: 'Relatório Diário (18h)',
-      job: agendarRelatoraioDiario()
-    });
+    if (!jobsAgendados.has('relatorio-diario')) {
+      jobs.push({
+        nome: 'Relatório Diário (18h)',
+        job: agendarRelatoraioDiario()
+      });
+      jobsAgendados.add('relatorio-diario');
+    }
 
     // Agendar alertas de estoque às 10h
-    jobs.push({
-      nome: 'Alertas de Estoque (10h)',
-      job: agendarAlertasEstoque()
-    });
+    if (!jobsAgendados.has('alertas-estoque')) {
+      jobs.push({
+        nome: 'Alertas de Estoque (10h)',
+        job: agendarAlertasEstoque()
+      });
+      jobsAgendados.add('alertas-estoque');
+    }
 
     // Agendar recomendações para VIPs às seg 9h
-    jobs.push({
-      nome: 'Recomendações VIPs (Seg 09h)',
-      job: agendarRecomendacoesVIPs()
-    });
+    if (!jobsAgendados.has('recomendacoes-vips')) {
+      jobs.push({
+        nome: 'Recomendações VIPs (Seg 09h)',
+        job: agendarRecomendacoesVIPs()
+      });
+      jobsAgendados.add('recomendacoes-vips');
+    }
 
     // Agendar backup automático às 02h
-    jobs.push({
-      nome: 'Backup Automático (02h)',
-      job: agendarBackupAutomatico()
-    });
+    if (!jobsAgendados.has('backup-automatico')) {
+      jobs.push({
+        nome: 'Backup Automático (02h)',
+        job: agendarBackupAutomatico()
+      });
+      jobsAgendados.add('backup-automatico');
+    }
 
     // Agendar resumo para Júlly às 20h
-    jobs.push({
-      nome: 'Resumo para Júlly (20h)',
-      job: agendarResumoJully()
-    });
+    if (!jobsAgendados.has('resumo-jully')) {
+      jobs.push({
+        nome: 'Resumo para Júlly (20h)',
+        job: agendarResumoJully()
+      });
+      jobsAgendados.add('resumo-jully');
+    }
 
     // Agendar relatório semanal todo domingo às 20h
-    jobs.push({
-      nome: 'Relatório Semanal (Dom 20h)',
-      job: agendarRelatorioSemanal()
-    });
+    if (!jobsAgendados.has('relatorio-semanal')) {
+      jobs.push({
+        nome: 'Relatório Semanal (Dom 20h)',
+        job: agendarRelatorioSemanal()
+      });
+      jobsAgendados.add('relatorio-semanal');
+    }
 
     logger.info(`✓ ${jobs.length} tarefas agendadas:`);
     jobs.forEach(j => logger.info(`   • ${j.nome}`));
@@ -359,6 +388,7 @@ function inicializarScheduler() {
 function cancelarTodosJobs() {
   try {
     schedule.gracefulShutdown();
+    jobsAgendados.clear();
     logger.info('✓ Todos os jobs agendados foram cancelados');
   } catch (error) {
     logger.error('Erro ao cancelar jobs:', error.message);
