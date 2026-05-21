@@ -3,6 +3,31 @@ import { env } from '../../config/env.js';
 import * as businessConversas from '../business/conversas.js';
 import * as whatsappSender from './sender.js';
 
+// ─── Deduplicação de mensagens ─────────────────────────────────────────────
+// Armazena IDs processados nos últimos 5 minutos para evitar reprocessamento
+// em caso de retry da Evolution API
+const mensagensProcessadas = new Map(); // messageId → timestamp
+const DEDUP_TTL_MS = 5 * 60 * 1000; // 5 minutos
+
+function jaProcessada(messageId) {
+  if (!messageId) return false;
+  const agora = Date.now();
+
+  // Limpar entradas expiradas
+  for (const [id, ts] of mensagensProcessadas.entries()) {
+    if (agora - ts > DEDUP_TTL_MS) mensagensProcessadas.delete(id);
+  }
+
+  if (mensagensProcessadas.has(messageId)) {
+    logger.warn(`[webhook] ⚠️ Mensagem duplicada ignorada: ${messageId}`);
+    return true;
+  }
+
+  mensagensProcessadas.set(messageId, agora);
+  return false;
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 /**
  * Valida webhook do WhatsApp (verificação inicial)
  */
@@ -118,6 +143,10 @@ function extrairMensagensDoPayload(body) {
       || '';
 
     if (from && text) {
+      // Deduplicação por ID da mensagem
+      if (jaProcessada(key.id)) {
+        return mensagens; // Já processada, ignora silenciosamente
+      }
       logger.info(`[webhook] ✓ Evolution 2.x: de=${from} texto="${text.substring(0, 50)}"`);
       mensagens.push({
         from,
