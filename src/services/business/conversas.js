@@ -173,7 +173,7 @@ FORMATO OBRIGATÓRIO:
 AÇÕES E QUANDO USAR:
 
 1. "criar_pedido" — quando mencionar produto + cliente
-   Exemplos: "1 zara M preto pra Maria", "adicionar pra entrega 2 mia P azul pra João", "anota aí 1 lia bordô G pra Ana", "faz um pedido de 1 nubia M preto pra lucia", "adicionar pedido: zara preto m para veronica", "adicionar: lia rosa G para joão"
+   Exemplos: "1 zara M preto pra Maria", "adicionar pra entrega 2 mia P azul pra João", "anota aí 1 lia bordô G pra Ana", "faz um pedido de 1 nubia M preto pra lucia", "adicionar pedido: zara preto m para veronica", "adicionar: lia bordô G para joão"
    → dados.itens = [{"modelo":"ZARA","tamanho":"M","cor":"preto","quantidade":1}]
    → dados.nome_cliente = "Maria"
 
