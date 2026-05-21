@@ -358,7 +358,22 @@ class AuthModal {
       }
 
       // Login com sucesso!
-      this.onLoginSuccess(data);
+      sessionStorage.setItem('authToken', data.token);
+      this.token = data.token;
+      this.clienteInfo = {
+        id_cliente: data.id_cliente,
+        nome: data.nome,
+        whatsapp: data.whatsapp,
+        email: data.email,
+        ja_tem_telefone: true
+      };
+
+      this.mostrarMensagem('login', `Bem-vindo, ${data.nome}!`, 'sucesso');
+      setTimeout(() => {
+        this.fecharModal();
+        this.atualizarUILogado();
+        window.dispatchEvent(new Event('clienteAutenticado'));
+      }, 800);
 
     } catch (error) {
       this.mostrarErro('login', 'Erro de conexão. Tente novamente.');
