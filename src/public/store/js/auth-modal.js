@@ -53,12 +53,13 @@ class AuthModal {
               <div id="loginSuccess" class="auth-success"></div>
 
               <div class="auth-form-group">
-                <label>CPF ou Email</label>
+                <label>CPF</label>
                 <input
                   type="text"
                   id="loginCpf"
-                  placeholder="00000000000 ou email@example.com"
+                  placeholder="00000000000"
                   autocomplete="off"
+                  inputmode="numeric"
                 >
               </div>
 
@@ -561,12 +562,13 @@ class AuthModal {
       <div id="loginSuccess" class="auth-success"></div>
 
       <div class="auth-form-group">
-        <label>CPF ou Email</label>
+        <label>CPF</label>
         <input
           type="text"
           id="loginCpf"
-          placeholder="00000000000 ou email@example.com"
+          placeholder="00000000000"
           autocomplete="off"
+          inputmode="numeric"
         >
       </div>
 
