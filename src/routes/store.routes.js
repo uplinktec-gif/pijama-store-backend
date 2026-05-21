@@ -4,6 +4,8 @@ import { criarPedido } from '../services/sheets/pedidos.js';
 import { findByWhatsApp, criarCliente } from '../services/sheets/clientes.js';
 import { lerFotos, inicializarAbaFotos, atualizarCapa } from '../services/sheets/fotos.js';
 import { logger } from '../utils/logger.js';
+import { enviarMensagem } from '../services/whatsapp/sender.js';
+import { env } from '../config/env.js';
 
 // Dados iniciais das fotos (migrados do HTML hardcoded)
 const FOTOS_INICIAIS = {
@@ -140,6 +142,38 @@ router.post('/checkout', async (req, res) => {
           cidade: 'Boa Vista'
         }).catch(() => {});
       }
+    }
+
+    // 🎉 ENVIAR NOTIFICAÇÃO WHATSAPP PARA FELIPE E JÚLLY
+    try {
+      const numeroPedidoFormatado = String(resultado.numeroPedido).padStart(3, '0');
+      const itensFormatados = itens
+        .map(i => `• ${i.quantidade}x ${i.modelo} ${i.tamanho} ${i.cor}`)
+        .join('\n');
+
+      const mensagemNotificacao = `🎉 NOVO PEDIDO! #${numeroPedidoFormatado}
+
+👤 Cliente: ${cliente.nome}
+📱 WhatsApp: ${cliente.whatsapp || 'N/A'}
+📦 Itens:
+${itensFormatados}
+
+💰 Total: R$ ${valorTotal.toFixed(2)}
+🚚 Tipo: ${cliente.tipo_entrega === 'ENTREGA' ? `ENTREGA (Frete: R$ ${valorFrete.toFixed(2)})` : 'RETIRADA'}
+📍 Endereço: ${cliente.endereco || 'Retirada na loja'}
+
+⏳ Aguardando pagamento via PIX...`;
+
+      // Enviar para Felipe
+      await enviarMensagem(env.numeroFelipe, mensagemNotificacao);
+
+      // Enviar para Júlly
+      await enviarMensagem(env.numeroJully, mensagemNotificacao);
+
+      logger.info(`✓ Notificação de novo pedido #${numeroPedidoFormatado} enviada para Felipe e Júlly`);
+    } catch (erroWhatsApp) {
+      logger.error('Erro ao enviar notificação WhatsApp:', erroWhatsApp.message);
+      // NÃO bloquear o checkout se a notificação falhar
     }
 
     // Retornar dados do PIX

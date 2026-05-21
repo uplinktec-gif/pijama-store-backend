@@ -214,6 +214,52 @@ class AuthModal {
       });
     }
 
+    // Formatação automática — CPF no cadastro: 000.000.000-00
+    const cadastroCpfInput = document.getElementById('cadastroCpf');
+    if (cadastroCpfInput) {
+      cadastroCpfInput.addEventListener('input', (e) => {
+        const input = e.target;
+        const cursorPos = input.selectionStart;
+        const anterior = input.value;
+
+        // Pegar só os dígitos digitados até agora
+        let digits = anterior.replace(/\D/g, '').slice(0, 11);
+
+        // Formatar
+        let formatted = digits;
+        if (digits.length > 9) formatted = `${digits.slice(0,3)}.${digits.slice(3,6)}.${digits.slice(6,9)}-${digits.slice(9)}`;
+        else if (digits.length > 6) formatted = `${digits.slice(0,3)}.${digits.slice(3,6)}.${digits.slice(6)}`;
+        else if (digits.length > 3) formatted = `${digits.slice(0,3)}.${digits.slice(3)}`;
+
+        if (input.value !== formatted) {
+          // Ajustar cursor: contar quantos dígitos havia antes da posição do cursor
+          const digitsBeforeCursor = anterior.slice(0, cursorPos).replace(/\D/g, '').length;
+          input.value = formatted;
+
+          // Reposicionar cursor na posição equivalente
+          let newPos = 0;
+          let digitsCount = 0;
+          for (let i = 0; i < formatted.length; i++) {
+            if (/\d/.test(formatted[i])) digitsCount++;
+            if (digitsCount === digitsBeforeCursor) { newPos = i + 1; break; }
+          }
+          input.setSelectionRange(newPos, newPos);
+        }
+      });
+    }
+
+    // Formatação automática — celular no cadastro: (95) 98765-4321
+    const cadastroCelularInput = document.getElementById('cadastroCelular');
+    if (cadastroCelularInput) {
+      cadastroCelularInput.addEventListener('input', (e) => {
+        let v = e.target.value.replace(/\D/g, '').slice(0, 11);
+        if (v.length > 6) v = `(${v.slice(0,2)}) ${v.slice(2,7)}-${v.slice(7)}`;
+        else if (v.length > 2) v = `(${v.slice(0,2)}) ${v.slice(2)}`;
+        else if (v.length > 0) v = `(${v}`;
+        e.target.value = v;
+      });
+    }
+
     // Login form
     const loginForm = document.getElementById('loginForm');
     if (loginForm) {

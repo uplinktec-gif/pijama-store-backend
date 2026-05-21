@@ -1,4 +1,4 @@
-import { getSheetsClient, getSpreadsheetId } from '../../config/sheets.js';
+﻿import { getSheetsClient, getSpreadsheetId } from '../../config/sheets.js';
 import { logger } from '../../utils/logger.js';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -6,14 +6,14 @@ const CLIENTES_SHEET = 'CLIENTES';
 const HEADER_ROW = 1;
 
 /**
- * Gera ID único para cliente
+ * Gera ID Ãºnico para cliente
  */
 function generateClienteId() {
   return uuidv4();
 }
 
 /**
- * Lê todos os clientes
+ * LÃª todos os clientes
  */
 async function readAllClientes() {
   try {
@@ -23,11 +23,11 @@ async function readAllClientes() {
     const spreadsheetId = getSpreadsheetId();
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: `${CLIENTES_SHEET}!A:N`
+      range: `${CLIENTES_SHEET}!A:P`
     });
 
     const rows = response.data.values || [];
-    if (rows.length <= 1) return []; // Apenas cabeçalho ou vazio
+    if (rows.length <= 1) return []; // Apenas cabeÃ§alho ou vazio
 
     const clientes = [];
     for (let i = HEADER_ROW; i < rows.length; i++) {
@@ -48,7 +48,9 @@ async function readAllClientes() {
         quantidade_pedidos: parseInt(row[10]) || 0,
         modelo_favorito: row[11] || '',
         data_ultimo_pedido: row[12],
-        observacoes: row[13] || ''
+        observacoes: row[13] || '',
+        cpf: row[14] || '',
+        google_id: row[15] || ''
       });
     }
 
@@ -70,7 +72,7 @@ async function findByWhatsApp(whatsapp) {
     const spreadsheetId = getSpreadsheetId();
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: `${CLIENTES_SHEET}!A:N`
+      range: `${CLIENTES_SHEET}!A:P`
     });
 
     const rows = response.data.values || [];
@@ -93,7 +95,9 @@ async function findByWhatsApp(whatsapp) {
           quantidade_pedidos: parseInt(row[10]) || 0,
           modelo_favorito: row[11] || '',
           data_ultimo_pedido: row[12],
-          observacoes: row[13] || ''
+          observacoes: row[13] || '',
+          cpf: row[14] || '',
+          google_id: row[15] || ''
         };
       }
     }
@@ -116,7 +120,7 @@ async function findById(idCliente) {
     const spreadsheetId = getSpreadsheetId();
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: `${CLIENTES_SHEET}!A:N`
+      range: `${CLIENTES_SHEET}!A:P`
     });
 
     const rows = response.data.values || [];
@@ -139,7 +143,9 @@ async function findById(idCliente) {
           quantidade_pedidos: parseInt(row[10]) || 0,
           modelo_favorito: row[11] || '',
           data_ultimo_pedido: row[12],
-          observacoes: row[13] || ''
+          observacoes: row[13] || '',
+          cpf: row[14] || '',
+          google_id: row[15] || ''
         };
       }
     }
@@ -157,7 +163,7 @@ async function findById(idCliente) {
 async function criarCliente(clienteData) {
   try {
     const sheets = getSheetsClient();
-    if (!sheets) return { success: false, error: 'Google Sheets não está inicializado' };
+    if (!sheets) return { success: false, error: 'Google Sheets nÃ£o estÃ¡ inicializado' };
 
     const spreadsheetId = getSpreadsheetId();
     const idCliente = generateClienteId();
@@ -177,19 +183,21 @@ async function criarCliente(clienteData) {
       1, // QUANTIDADE_PEDIDOS
       clienteData.modelo_favorito || '',
       now, // DATA_ULTIMO_PEDIDO
-      clienteData.observacoes || ''
+      clienteData.observacoes || '',
+      clienteData.cpf || '', // CPF (coluna O)
+      clienteData.google_id || '' // GOOGLE_ID (coluna P)
     ];
 
     await sheets.spreadsheets.values.append({
       spreadsheetId,
-      range: `${CLIENTES_SHEET}!A:N`,
+      range: `${CLIENTES_SHEET}!A:P`,
       valueInputOption: 'USER_ENTERED',
       requestBody: {
         values: [row]
       }
     });
 
-    logger.info(`✓ Cliente criado: ${clienteData.nome} (${clienteData.whatsapp})`);
+    logger.info(`✓ Cliente criado: ${clienteData.nome} (${clienteData.whatsapp || clienteData.cpf})`);
     return { success: true, idCliente };
   } catch (error) {
     logger.error('Erro ao criar cliente:', error.message);
@@ -204,7 +212,7 @@ async function atualizarCliente(idCliente, clienteData) {
   try {
     const cliente = await findById(idCliente);
     if (!cliente) {
-      return { success: false, error: `Cliente #${idCliente} não encontrado` };
+      return { success: false, error: `Cliente #${idCliente} nÃ£o encontrado` };
     }
 
     const sheets = getSheetsClient();
@@ -234,7 +242,7 @@ async function atualizarCliente(idCliente, clienteData) {
       });
     }
 
-    // Atualizar endereço se fornecido
+    // Atualizar endereÃ§o se fornecido
     if (clienteData.endereco) {
       await sheets.spreadsheets.values.update({
         spreadsheetId,
@@ -282,7 +290,7 @@ async function atualizarCliente(idCliente, clienteData) {
       });
     }
 
-    // Atualizar observações se fornecido
+    // Atualizar observaÃ§Ãµes se fornecido
     if (clienteData.observacoes) {
       await sheets.spreadsheets.values.update({
         spreadsheetId,
@@ -294,7 +302,7 @@ async function atualizarCliente(idCliente, clienteData) {
       });
     }
 
-    logger.info(`✓ Cliente ${cliente.nome} atualizado`);
+    logger.info(`âœ“ Cliente ${cliente.nome} atualizado`);
     return { success: true };
   } catch (error) {
     logger.error('Erro ao atualizar cliente:', error.message);
@@ -309,7 +317,7 @@ async function atualizarEstatisticas(idCliente, valorPedido, modeloFavorito) {
   try {
     const cliente = await findById(idCliente);
     if (!cliente) {
-      return { success: false, error: `Cliente #${idCliente} não encontrado` };
+      return { success: false, error: `Cliente #${idCliente} nÃ£o encontrado` };
     }
 
     const sheets = getSheetsClient();
@@ -360,10 +368,10 @@ async function atualizarEstatisticas(idCliente, valorPedido, modeloFavorito) {
       }
     });
 
-    logger.info(`✓ Estatísticas de ${cliente.nome} atualizadas`);
+    logger.info(`âœ“ EstatÃ­sticas de ${cliente.nome} atualizadas`);
     return { success: true };
   } catch (error) {
-    logger.error('Erro ao atualizar estatísticas:', error.message);
+    logger.error('Erro ao atualizar estatÃ­sticas:', error.message);
     return { success: false, error: error.message };
   }
 }
@@ -382,7 +390,7 @@ async function listarVIPs() {
 }
 
 /**
- * Retorna clientes com última compra > 30 dias (inativos)
+ * Retorna clientes com Ãºltima compra > 30 dias (inativos)
  */
 async function listarInativos(diasLimite = 30) {
   try {
@@ -404,7 +412,7 @@ async function listarInativos(diasLimite = 30) {
 /**
  * Buscar cliente por CPF
  * Nota: Atualmente procura no email (campo D) que pode conter CPF
- * TODO: Adicionar coluna de CPF à aba CLIENTES para busca mais eficiente
+ * TODO: Adicionar coluna de CPF Ã  aba CLIENTES para busca mais eficiente
  */
 async function buscarClientePorCPF(cpf) {
   try {
@@ -414,7 +422,7 @@ async function buscarClientePorCPF(cpf) {
     const spreadsheetId = getSpreadsheetId();
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: `${CLIENTES_SHEET}!A:N`
+      range: `${CLIENTES_SHEET}!A:P`
     });
 
     const rows = response.data.values || [];
@@ -422,7 +430,7 @@ async function buscarClientePorCPF(cpf) {
     // Procurar por CPF no email ou em outros campos
     for (let i = HEADER_ROW; i < rows.length; i++) {
       const row = rows[i];
-      // Verificar se CPF está no email (campo D)
+      // Verificar se CPF estÃ¡ no email (campo D)
       if (row[3] && row[3].replace(/\D/g, '') === cpf) {
         return {
           rowIndex: i + 1,
@@ -460,11 +468,112 @@ async function obterClientePorId(idCliente) {
   return await findById(idCliente);
 }
 
+
+/**
+ * Busca cliente por CPF
+ */
+async function findByCPF(cpf) {
+  try {
+    const sheets = getSheetsClient();
+    if (!sheets) return null;
+
+    const spreadsheetId = getSpreadsheetId();
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: `${CLIENTES_SHEET}!A:P`
+    });
+
+    const rows = response.data.values || [];
+
+    for (let i = HEADER_ROW; i < rows.length; i++) {
+      const row = rows[i];
+      // Coluna O (index 14) contém o CPF
+      if (row[14] && row[14].replace(/\D/g, '') === cpf) {
+        return {
+          rowIndex: i + 1,
+          id_cliente: row[0],
+          nome: row[1],
+          whatsapp: row[2],
+          email: row[3] || '',
+          endereco: row[4] || '',
+          bairro: row[5] || '',
+          cidade: row[6] || '',
+          telefone_alternativo: row[7] || '',
+          data_primeiro_pedido: row[8],
+          total_gasto: parseFloat(row[9]) || 0,
+          quantidade_pedidos: parseInt(row[10]) || 0,
+          modelo_favorito: row[11] || '',
+          data_ultimo_pedido: row[12],
+          observacoes: row[13] || '',
+          cpf: row[14] || '',
+          google_id: row[15] || ''
+        };
+      }
+    }
+
+    return null;
+  } catch (error) {
+    logger.error('Erro ao buscar cliente por CPF:', error.message);
+    return null;
+  }
+}
+
+/**
+ * Busca cliente por Google ID
+ */
+async function findByGoogleId(googleId) {
+  try {
+    const sheets = getSheetsClient();
+    if (!sheets) return null;
+
+    const spreadsheetId = getSpreadsheetId();
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId,
+      range: `${CLIENTES_SHEET}!A:P`
+    });
+
+    const rows = response.data.values || [];
+
+    for (let i = HEADER_ROW; i < rows.length; i++) {
+      const row = rows[i];
+      // Coluna P (index 15) contém o google_id
+      if (row[15] === googleId) {
+        return {
+          rowIndex: i + 1,
+          id_cliente: row[0],
+          nome: row[1],
+          whatsapp: row[2],
+          email: row[3] || '',
+          endereco: row[4] || '',
+          bairro: row[5] || '',
+          cidade: row[6] || '',
+          telefone_alternativo: row[7] || '',
+          data_primeiro_pedido: row[8],
+          total_gasto: parseFloat(row[9]) || 0,
+          quantidade_pedidos: parseInt(row[10]) || 0,
+          modelo_favorito: row[11] || '',
+          data_ultimo_pedido: row[12],
+          observacoes: row[13] || '',
+          cpf: row[14] || '',
+          google_id: row[15] || ''
+        };
+      }
+    }
+
+    return null;
+  } catch (error) {
+    logger.error('Erro ao buscar cliente por Google ID:', error.message);
+    return null;
+  }
+}
+
 export {
   generateClienteId,
   readAllClientes,
   findByWhatsApp,
   findById,
+  findByCPF,
+  findByGoogleId,
   criarCliente,
   atualizarCliente,
   atualizarEstatisticas,
@@ -473,3 +582,5 @@ export {
   buscarClientePorCPF,
   obterClientePorId
 };
+
+

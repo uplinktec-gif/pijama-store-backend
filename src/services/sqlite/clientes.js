@@ -98,6 +98,18 @@ export async function criarCliente(clienteData) {
     const idCliente = clienteData.id_cliente || generateClienteId();
     const now = new Date().toISOString();
 
+    // Normalizar CPF se fornecido
+    const cpfNormalizado = clienteData.cpf ? normalizarCPF(clienteData.cpf) : null;
+
+    logger.debug(`[sqlite:clientes] criarCliente - dados recebidos:`, {
+      idCliente,
+      nome: clienteData.nome,
+      whatsapp: clienteData.whatsapp,
+      cpf_original: clienteData.cpf,
+      cpf_normalizado: cpfNormalizado,
+      email: clienteData.email
+    });
+
     run(
       `INSERT INTO clientes
        (id_cliente, nome, whatsapp, cpf, email, endereco, bairro, cidade,
@@ -108,7 +120,7 @@ export async function criarCliente(clienteData) {
         idCliente,
         clienteData.nome || '',
         clienteData.whatsapp || null,
-        clienteData.cpf ? normalizarCPF(clienteData.cpf) : null,
+        cpfNormalizado,
         clienteData.email || null,
         clienteData.endereco || '',
         clienteData.bairro || '',
@@ -123,6 +135,10 @@ export async function criarCliente(clienteData) {
         clienteData.google_id || null
       ]
     );
+
+    // Força uma verificação imediata para debug
+    const novoCliente = queryOne('SELECT cpf FROM clientes WHERE id_cliente = ?', [idCliente]);
+    logger.info(`[sqlite:clientes] Cliente criado: ${idCliente}, CPF salvo: ${novoCliente?.cpf || 'NULL'}`);
 
     return { success: true, idCliente };
   } catch (error) {

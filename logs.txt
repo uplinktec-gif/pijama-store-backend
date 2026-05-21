@@ -1,0 +1,30 @@
+
+> pijama-store-backend@1.0.0 start
+> node server.js
+
+[2026-05-21 16:06:28] WARN: ⚠️ Variáveis Google OAuth não configuradas no .env 
+[2026-05-21 16:06:28] WARN:    GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_CALLBACK_URL são obrigatórias 
+Warning: connect.session() MemoryStore is not
+designed for a production environment, as it will leak
+memory, and will not scale past a single process.
+[2026-05-21 16:06:28] INFO: ✓ SQLite carregado do arquivo: C:\Users\Felipe\pijama-store-backend\data\pijama-store.db 
+[2026-05-21 16:06:28] INFO: ✓ Todas as tabelas e índices criados/verificados 
+[2026-05-21 16:06:28] INFO: ✓ Database inicializado com sucesso 
+[2026-05-21 16:06:28] INFO: ✓ Claude API inicializado com sucesso 
+[2026-05-21 16:06:28] INFO: ✓ Claude Haiku (Anthropic) inicializado 
+[2026-05-21 16:06:28] INFO: ✓ Google Sheets inicializado com sucesso 
+[2026-05-21 16:06:28] INFO: ✓ Secret de sessão cliente inicializado 
+[2026-05-21 16:06:28] WARN: Porta 3000 em uso, tentando 3001... 
+[2026-05-21 16:06:28] WARN: Porta 3001 em uso, tentando 3002... 
+[2026-05-21 16:06:28] WARN: Porta 3002 em uso, tentando 3003... 
+[2026-05-21 16:06:28] WARN: Porta 3003 em uso, tentando 3004... 
+[2026-05-21 16:06:28] INFO: ✓ Servidor rodando em http://localhost:3004 
+[2026-05-21 16:06:28] INFO: ✓ Ambiente: production 
+[2026-05-21 16:06:28] INFO: ⏰ Inicializando scheduler de tarefas automáticas 
+[2026-05-21 16:06:28] INFO: ✓ 6 tarefas agendadas: 
+[2026-05-21 16:06:28] INFO:    • Relatório Diário (18h) 
+[2026-05-21 16:06:28] INFO:    • Alertas de Estoque (10h) 
+[2026-05-21 16:06:28] INFO:    • Recomendações VIPs (Seg 09h) 
+[2026-05-21 16:06:28] INFO:    • Backup Automático (02h) 
+[2026-05-21 16:06:28] INFO:    • Resumo para Júlly (20h) 
+[2026-05-21 16:06:28] INFO:    • Relatório Semanal (Dom 20h) 

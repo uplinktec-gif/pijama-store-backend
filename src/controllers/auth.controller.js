@@ -234,8 +234,11 @@ export async function registrarCliente(req, res) {
   try {
     const { cpf, nome, celular, email } = req.body;
 
+    logger.info(`[AUTH] registrarCliente recebido - cpf: ${cpf}, nome: ${nome}, celular: ${celular}, email: ${email}`);
+
     // Validações
     if (!cpf || !validarCPF(cpf)) {
+      logger.warn(`[AUTH] CPF inválido: ${cpf}`);
       return res.status(400).json({
         sucesso: false,
         mensagem: 'CPF inválido'

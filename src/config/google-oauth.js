@@ -37,8 +37,13 @@ export function configurarGoogleOAuth() {
           const email = profile.emails?.[0]?.value;
           const foto = profile.photos?.[0]?.value;
 
-          // Buscar cliente por email
-          let cliente = await clientesService.findByWhatsApp(email);
+          // Buscar cliente por Google ID
+          let cliente = await clientesService.findByGoogleId(googleId);
+
+          // Se não encontrou, buscar por email
+          if (!cliente && email) {
+            cliente = await clientesService.findByWhatsApp(email);
+          }
 
           // Se não encontrou por email, criar novo
           if (!cliente) {
@@ -47,8 +52,8 @@ export function configurarGoogleOAuth() {
             const resultado = await clientesService.criarCliente({
               nome,
               email,
-              whatsapp: email, // Usar email como identificador até ter WhatsApp
-              observacoes: `Google ID: ${googleId} | Foto: ${foto || 'N/A'}`
+              google_id: googleId,
+              observacoes: `Registrado via Google OAuth | Foto: ${foto || 'N/A'}`
             });
 
             if (resultado.success) {
@@ -60,11 +65,10 @@ export function configurarGoogleOAuth() {
           } else {
             logger.info(`[Google OAuth] Cliente existente: ${cliente.nome}`);
 
-            // Atualizar Google ID na observação se necessário
-            if (!cliente.observacoes?.includes('Google ID')) {
-              const novasObs = `${cliente.observacoes || ''} | Google ID: ${googleId}`;
+            // Atualizar Google ID se ainda não tiver
+            if (!cliente.google_id) {
               await clientesService.atualizarCliente(cliente.id_cliente, {
-                observacoes: novasObs.trim()
+                google_id: googleId
               });
             }
           }

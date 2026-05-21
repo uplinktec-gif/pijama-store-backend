@@ -154,7 +154,12 @@ export function run(sql, params = []) {
     const id = meta?.id ?? null;
     const changes = meta?.changes ?? 0;
 
-    saveDatabase(); // Debounced save após escrita
+    // FORÇA SAVE IMEDIATO para INSERT (não debounce)
+    if (sql.trim().toUpperCase().startsWith('INSERT')) {
+      saveDatabase(true); // Force immediate save
+    } else {
+      saveDatabase(); // Debounced save para UPDATE/DELETE
+    }
 
     return { success: true, id, changes };
   } catch (error) {
