@@ -470,9 +470,11 @@ class AuthModal {
     if (!btn) return;
 
     if (this.clienteInfo && this.token) {
-      // Simples: apenas mostrar bem-vindo + logout
-      const nomeCliente = this.clienteInfo.nome || 'Cliente';
-      btn.innerHTML = `Bem-vindo, ${nomeCliente}!`;
+      // Extrair primeiro e último nome e capitalizar
+      const nomeCompleto = this.clienteInfo.nome || 'Cliente';
+      const nomeFormatado = this.extrairPrimeiroUltimoNome(nomeCompleto);
+
+      btn.innerHTML = `Bem-vindo, ${nomeFormatado}!`;
       btn.classList.add('logado');
       btn.onclick = () => this.logout();
       btn.title = 'Clique para sair';
@@ -482,6 +484,31 @@ class AuthModal {
       btn.onclick = () => this.abrirModal();
       btn.title = 'Clique para fazer login';
     }
+  }
+
+  /**
+   * Extrai primeiro e último nome, capitalizando cada um
+   */
+  extrairPrimeiroUltimoNome(nomeCompleto) {
+    if (!nomeCompleto) return 'Cliente';
+
+    const palavras = nomeCompleto.trim().split(/\s+/).filter(p => p.length > 0);
+
+    if (palavras.length === 0) return 'Cliente';
+    if (palavras.length === 1) return this.capitalizar(palavras[0]);
+
+    const primeiro = this.capitalizar(palavras[0]);
+    const ultimo = this.capitalizar(palavras[palavras.length - 1]);
+
+    return `${primeiro} ${ultimo}`;
+  }
+
+  /**
+   * Capitaliza a primeira letra de uma palavra
+   */
+  capitalizar(palavra) {
+    if (!palavra) return '';
+    return palavra.charAt(0).toUpperCase() + palavra.slice(1).toLowerCase();
   }
 
   /**
