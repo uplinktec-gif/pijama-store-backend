@@ -348,6 +348,12 @@ const FAST_PATH_RULES = [
   { regex: /^@estoque$/i, action: '@estoque' },
   { regex: /^@(an[aá]lise|analysis|vendas|relat[oó]rio?)$/i, action: '@analise' },
   { regex: /^@atualizar\s+/i, action: '@atualizar' },
+  // ⭐ CONSULTAR ESTOQUE — "tem X", "temos Y", "existe Z" (NOVO: consulta banco real)
+  {
+    regex: /(?:t[eê]m|temos|existe|há)\s+(?:algum|alguma|[oa]s?)?\s*(?:pijama|peça|roupa)?\s*(.+)/i,
+    action: 'consultar_estoque',
+    extract: m => ({ criterio: m[1] })
+  },
   // Confirmar pagamento: "pedido 5 pago pix" / "5 pago" / "pago pedido 5" / "pago 5 pix"
   {
     regex: /(?:pedido\s+)?#?(\d+)\s+pag[oa](?:u|ment[oa])?\s*(pix|cart[aã]o|dinheiro|boleto)?/i,
@@ -451,6 +457,13 @@ async function processarMensagemComContexto(mensagem, clienteWhatsApp) {
         const resposta = gerarSaudacao(clienteWhatsApp);
         logger.info(`[FastPath] Saudação em ${Date.now() - inicio}ms`);
         return { success: true, resposta, tipo: 'SAUDACAO' };
+      }
+
+      // ⭐ Consultar estoque (NOVO: consulta banco real, sem alucinação)
+      if (fp.action === 'consultar_estoque') {
+        const resposta = await consultarEstoqueReal(fp.dados.criterio);
+        logger.info(`[FastPath] Estoque consultado em ${Date.now() - inicio}ms | criterio="${fp.dados.criterio.substring(0, 50)}"`);
+        return { success: true, resposta, tipo: 'CONSULTAR_ESTOQUE' };
       }
 
       // Tratar listar pedidos abertos
@@ -1021,6 +1034,94 @@ async function processarAtualizarEstoque(modelo, tamanho, cor, quantidade) {
   } catch (error) {
     logger.error('[processarAtualizarEstoque] Erro:', error.message);
     return '❌ Erro ao atualizar estoque. Tente de novo.';
+  }
+}
+
+/**
+ * ⭐ NOVO: Consulta estoque REAL no banco de dados (não inventa informações)
+ * Extrai modelo/cor/tamanho da pergunta e retorna apenas o que existe
+ * Exemplos:
+ *   "tem algum pijama na cor cinza tamanho p?" → procura ZARA/MIA/etc cinza P
+ *   "temos azul marinho?" → lista tudo em azul marinho
+ *   "existe ZARA?" → lista todas as cores/tamanhos da ZARA
+ */
+async function consultarEstoqueReal(criterio) {
+  try {
+    // Lista todos os modelos conhecidos
+    const modelos = ['zara', 'mia', 'lia', 'núbia', 'nubia', 'lívia', 'livia', 'beatriz', 'anne'];
+    const tamanhos = ['p', 'm', 'g', 'gg'];
+    const cores = [
+      'preto', 'branco', 'azul', 'cinza', 'rosa', 'roxo', 'vermelho',
+      'amarelo', 'verde', 'laranja', 'bordo', 'bordô', 'marrom', 'bege',
+      'azul marinho', 'turquesa', 'navy', 'magenta', 'nude', 'off-white'
+    ];
+
+    const criterioLower = criterio.toLowerCase().trim();
+
+    // Buscar estoque real
+    const estoqueCompleto = await sheetsEstoque.readAllEstoque();
+    if (!estoqueCompleto || estoqueCompleto.length === 0) {
+      return 'Desculpe, não consegui consultar o estoque neste momento. Tenta de novo?';
+    }
+
+    // Filtrar por critério (modelo OU cor OU tamanho)
+    const resultados = estoqueCompleto.filter(item => {
+      const modeloMatch = modelos.some(m => criterioLower.includes(m) && item.modelo.toLowerCase() === m);
+      const corMatch = cores.some(c => criterioLower.includes(c) && item.cor.toLowerCase().includes(c));
+      const tamanhoMatch = tamanhos.some(t => criterioLower.includes(t) && item.tamanho.toLowerCase() === t);
+
+      // Se nenhum critério específico foi mencionado, retorna tudo disponível
+      if (!modeloMatch && !corMatch && !tamanhoMatch) return item.quantidade_disponivel > 0;
+
+      // Se algum critério foi mencionado, precisa dar match
+      return (modeloMatch || corMatch || tamanhoMatch) && item.quantidade_disponivel > 0;
+    });
+
+    // Nenhum resultado encontrado
+    if (resultados.length === 0) {
+      // Extrai o que o usuário procurou para resposta mais específica
+      let naoTemQue = criterio;
+      for (const m of modelos) {
+        if (criterioLower.includes(m)) {
+          naoTemQue = m.toUpperCase();
+          break;
+        }
+      }
+      return `Desculpe, não temos ${naoTemQue} disponível no momento. Quer tentar outro modelo ou cor? 🙏`;
+    }
+
+    // Formatar resposta: agrupar por modelo → cor
+    const mapa = {};
+    for (const item of resultados) {
+      const modelo = item.modelo.toUpperCase();
+      const cor = item.cor.toUpperCase();
+
+      if (!mapa[modelo]) mapa[modelo] = {};
+      if (!mapa[modelo][cor]) mapa[modelo][cor] = [];
+      mapa[modelo][cor].push(`${item.tamanho}=${item.quantidade_disponivel}`);
+    }
+
+    // Montar mensagem
+    const linhas = ['✅ *Temos disponível:*\n'];
+    for (const modelo of Object.keys(mapa).sort()) {
+      const parteCores = [];
+      for (const cor of Object.keys(mapa[modelo]).sort()) {
+        const tamanhosStr = mapa[modelo][cor].join(', ');
+        parteCores.push(`${cor}: ${tamanhosStr}`);
+      }
+      linhas.push(`*${modelo}*`);
+      for (const parte of parteCores) {
+        linhas.push(`  ${parte}`);
+      }
+      linhas.push('');
+    }
+
+    linhas.push('_Qual você prefere?_');
+    return linhas.join('\n').trim();
+
+  } catch (error) {
+    logger.error('[consultarEstoqueReal] Erro:', error.message);
+    return 'Desculpe, tive um problema ao consultar o estoque. Tenta de novo? 🙏';
   }
 }
 
