@@ -53,17 +53,25 @@ export async function loginCelularCpf(req, res) {
     }
 
     // Buscar cliente pelo celular — tenta várias variações do número
-    // Ex: "95987654321" pode estar como "95987654321" ou "5595987654321"
+    // Ex: "95987654321" pode estar como "95987654321", "5595987654321", "+5595987654321"
     const variantes = [
       celularNorm,
       '55' + celularNorm,
-      celularNorm.startsWith('55') ? celularNorm.slice(2) : null
+      '+55' + celularNorm,
+      celularNorm.startsWith('55') ? celularNorm.slice(2) : null,
+      celularNorm.startsWith('+55') ? celularNorm.slice(3) : null
     ].filter(Boolean);
 
     let cliente = null;
+    let candidatos = [];
     for (const variante of variantes) {
       const rows = query('SELECT * FROM clientes WHERE whatsapp = ?', [variante]);
-      if (rows.length > 0) { cliente = rows[0]; break; }
+      candidatos.push(...rows);
+    }
+
+    if (candidatos.length > 0) {
+      // Preferir o registro que TEM CPF cadastrado
+      cliente = candidatos.find(c => c.cpf && c.cpf.trim()) || candidatos[0];
     }
 
     if (!cliente) {
