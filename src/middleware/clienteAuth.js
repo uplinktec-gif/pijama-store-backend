@@ -1,42 +1,38 @@
-import { validarTokenSessao, extrairTokenDoHeader } from '../utils/sessionTokens.js';
+import jwt from 'jsonwebtoken';
 import { logger } from '../utils/logger.js';
 
 /**
- * Middleware para validar token de sessão do cliente
- * Extrai o token do header Authorization: Bearer <token>
- * Valida e adiciona dados do cliente ao req.cliente
+ * Middleware para validar token JWT do cliente (loja + portal)
+ * Aceita tokens gerados pelo auth.controller.js (JWT_SECRET)
  */
 export const clienteAuth = (req, res, next) => {
   try {
-    // Extrair header Authorization
     const authHeader = req.headers.authorization;
-    const token = extrairTokenDoHeader(authHeader);
-
-    if (!token) {
-      logger.warn('[clienteAuth] Token não fornecido no header Authorization');
-      return res.status(401).json({
-        sucesso: false,
-        mensagem: 'Token não fornecido. Use header: Authorization: Bearer <token>'
-      });
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ sucesso: false, mensagem: 'Token não fornecido' });
     }
 
-    // Validar token
-    const decoded = validarTokenSessao(token);
+    const token = authHeader.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({ sucesso: false, mensagem: 'Token inválido' });
+    }
 
-    // Adicionar dados do cliente ao request
+    // Validar com JWT_SECRET (mesmo usado em auth.controller.js)
+    const secret = process.env.JWT_SECRET || 'pluma-jwt-secret-2025';
+    const decoded = jwt.verify(token, secret);
+
     req.cliente = {
       id_cliente: decoded.id_cliente,
-      nome_cliente: decoded.nome_cliente
+      nome_cliente: decoded.nome_cliente || decoded.nome,
+      whatsapp: decoded.whatsapp,
+      email: decoded.email
     };
 
-    logger.debug(`[clienteAuth] ✓ Token válido para cliente ${decoded.id_cliente}`);
+    logger.debug(`[clienteAuth] ✓ Token válido para ${decoded.id_cliente}`);
     next();
   } catch (err) {
-    logger.warn('[clienteAuth] Erro ao validar token:', err.message);
-    return res.status(401).json({
-      sucesso: false,
-      mensagem: 'Token inválido ou expirado'
-    });
+    logger.warn('[clienteAuth] Token inválido:', err.message);
+    return res.status(401).json({ sucesso: false, mensagem: 'Token inválido ou expirado' });
   }
 };
 

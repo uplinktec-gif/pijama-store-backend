@@ -235,6 +235,7 @@ footer strong { color: white; }
   .hero { padding: 40px 20px 35px; }
 }
 </style>
+<link rel="stylesheet" href="/css/auth-modal.css?v=20260521c">
 </head>
 <body>
 
@@ -249,6 +250,7 @@ footer strong { color: white; }
       <a href="#produtos">Coleção</a>
       <a href="https://wa.me/5595991268494?text=Oi%2C+vim+do+site!">WhatsApp</a>
     </nav>
+    <button class="btn-auth-header" onclick="authModal ? authModal.abrirModal() : null">Entrar</button>
     <button class="cart-btn" onclick="toggleCart()">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
       Carrinho
@@ -1032,12 +1034,80 @@ function toggleCart() {
    CHECKOUT
    ========================================================= */
 function openCheckout() {
+  // PHASE 2B: Validar se usuário está autenticado
+  const token = sessionStorage.getItem('authToken');
+
+  if (!token) {
+    // Usuário não logado → mostrar modal de autenticação
+    if (window.authModal) {
+      // Fechar cart drawer
+      toggleCart();
+
+      // Abrir modal de autenticação
+      window.authModal.abrirModal();
+
+      // Após autenticação bem-sucedida, continuar com checkout
+      window.addEventListener('clienteAutenticado', function handleCheckout() {
+        // Modal de auth fechou, usuário logou → pré-preencher e abrir checkout
+        setTimeout(() => {
+          preencherCheckoutComDadosCliente(sessionStorage.getItem('authToken'));
+          abrirCheckoutLogado();
+        }, 300);
+
+        // Remover listener para não disparar múltiplas vezes
+        window.removeEventListener('clienteAutenticado', handleCheckout);
+      }, { once: true });
+    }
+    return;
+  }
+
+  // Usuário já logado → abrir checkout normalmente
+  abrirCheckoutLogado();
+}
+
+function abrirCheckoutLogado() {
   toggleCart();
   renderCheckoutSummary();
   document.getElementById('checkout-form-step').style.display = 'block';
   document.getElementById('pix-screen').classList.remove('show');
   document.getElementById('checkout-modal').classList.add('open');
   document.body.style.overflow = 'hidden';
+}
+
+async function preencherCheckoutComDadosCliente(token) {
+  try {
+    const response = await fetch('/auth/validar-token', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      console.warn('[checkout] Erro ao validar token:', response.status);
+      return;
+    }
+
+    const data = await response.json();
+
+    // Pré-preencher campos do checkout
+    const nomeInput = document.querySelector('#f-nome');
+    const whatsInput = document.querySelector('#f-whats');
+
+    if (nomeInput && data.nome_cliente) {
+      nomeInput.value = data.nome_cliente;
+    }
+
+    // Se o endpoint retornar telefone, pré-preencher também
+    if (whatsInput && data.telefone) {
+      whatsInput.value = data.telefone;
+    }
+
+    console.log('[checkout] Dados do cliente pré-preenchidos');
+  } catch (error) {
+    console.error('[checkout] Erro ao pré-preencher:', error);
+  }
 }
 
 function closeCheckout() {
@@ -1099,8 +1169,24 @@ async function submitCheckout() {
   btn.textContent = 'Processando...';
 
   try {
+    // PHASE 2B: Extrair id_cliente do token JWT
+    let id_cliente = null;
+    const token = sessionStorage.getItem('authToken');
+    if (token) {
+      try {
+        const parts = token.split('.');
+        if (parts.length === 3) {
+          const decoded = JSON.parse(atob(parts[1]));
+          id_cliente = decoded.id_cliente || null;
+        }
+      } catch (e) {
+        console.warn('[checkout] Erro ao decodificar token:', e);
+      }
+    }
+
     const { frete } = calcularTotal();
     const body = {
+      id_cliente: id_cliente,  // NOVO: incluir id_cliente
       cliente: { nome, whatsapp: whats, endereco, tipo_entrega: tipoEntrega },
       frete,
       itens: cart.map(i => ({
@@ -1114,7 +1200,10 @@ async function submitCheckout() {
 
     const res = await fetch('/api/store/checkout', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': token ? `Bearer ${token}` : undefined
+      },
       body: JSON.stringify(body)
     });
     const data = await res.json();
@@ -1229,5 +1318,6 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') { closeProductModal(); closeCheckout(); }
 });
 </script>
+<script src="/js/auth-modal.js?v=20260521c"></script>
 </body>
 </html>

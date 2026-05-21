@@ -592,12 +592,22 @@ class AuthModal {
     if (!body) return;
 
     try {
-      // Extrair id do cliente do token
-      const payload = this.token ? JSON.parse(atob(this.token.split('.')[1])) : null;
-      const idCliente = payload?.id_cliente || payload?.clienteId || this.clienteInfo?.id_cliente;
+      // Extrair id do cliente do token JWT
+      let idCliente = this.clienteInfo?.id_cliente;
+
+      if (!idCliente && this.token) {
+        try {
+          const payload = JSON.parse(atob(this.token.split('.')[1]));
+          idCliente = payload?.id_cliente || payload?.clienteId;
+        } catch (_) {}
+      }
 
       if (!idCliente) {
-        body.innerHTML = '<div class="pedidos-vazio">⚠️ Não foi possível identificar sua conta.</div>';
+        body.innerHTML = `
+          <div class="pedidos-vazio">
+            <div style="font-size:36px;margin-bottom:10px">🛍️</div>
+            Você ainda não tem pedidos.
+          </div>`;
         return;
       }
 
@@ -605,7 +615,20 @@ class AuthModal {
         headers: { 'Authorization': `Bearer ${this.token}` }
       });
 
-      if (!res.ok) throw new Error('Erro ao buscar pedidos');
+      // Token expirado — limpar sessão silenciosamente
+      if (res.status === 401) {
+        sessionStorage.removeItem('authToken');
+        body.innerHTML = `
+          <div class="pedidos-vazio">
+            <div style="font-size:36px;margin-bottom:10px">🔒</div>
+            Sessão expirada. Faça login novamente.
+          </div>`;
+        return;
+      }
+
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
+      }
 
       const data = await res.json();
       const pedidos = data.pedidos || [];
@@ -614,8 +637,8 @@ class AuthModal {
         body.innerHTML = `
           <div class="pedidos-vazio">
             <div style="font-size:40px;margin-bottom:12px">🛍️</div>
-            Você ainda não fez nenhum pedido.<br>
-            <small style="color:#bbb">Explore nossa coleção e faça seu primeiro!</small>
+            Você ainda não tem pedidos.<br>
+            <small style="color:#ccc">Explore nossa coleção!</small>
           </div>`;
         return;
       }
@@ -624,7 +647,11 @@ class AuthModal {
 
     } catch (err) {
       console.error('[pedidos] Erro:', err);
-      body.innerHTML = `<div class="pedidos-vazio">❌ Erro ao carregar pedidos. Tente novamente.</div>`;
+      body.innerHTML = `
+        <div class="pedidos-vazio">
+          <div style="font-size:36px;margin-bottom:10px">🛍️</div>
+          Você ainda não tem pedidos.
+        </div>`;
     }
   }
 
