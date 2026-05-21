@@ -99,22 +99,24 @@ class AuthModal {
               <div id="cadastroSuccess" class="auth-success"></div>
 
               <div class="auth-form-group">
-                <label>Nome Completo</label>
+                <label>Nome Completo <span style="color: #e75480;">*</span></label>
                 <input
                   type="text"
                   id="cadastroNome"
                   placeholder="João Silva"
                   autocomplete="off"
+                  required
                 >
               </div>
 
               <div class="auth-form-group">
-                <label>CPF</label>
+                <label>CPF <span style="color: #e75480;">*</span></label>
                 <input
                   type="text"
                   id="cadastroCpf"
-                  placeholder="00000000000"
+                  placeholder="000.000.000-00"
                   autocomplete="off"
+                  required
                 >
               </div>
 
@@ -123,8 +125,9 @@ class AuthModal {
                 <input
                   type="tel"
                   id="cadastroCelular"
-                  placeholder="11987654321"
+                  placeholder="(95) 98765-4321"
                   autocomplete="off"
+                  required
                 >
               </div>
 
@@ -338,7 +341,8 @@ class AuthModal {
       const response = await fetch('/auth/cliente/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ celular, cpf })
+        body: JSON.stringify({ celular, cpf }),
+        timeout: 15000
       });
 
       const data = await response.json();
@@ -433,7 +437,8 @@ class AuthModal {
         body: JSON.stringify({
           cpf,
           ultimos_2_digitos: digitosDigitados
-        })
+        }),
+        timeout: 15000
       });
 
       const data = await response.json();
@@ -509,7 +514,8 @@ class AuthModal {
           nome,
           celular,
           email: email || undefined
-        })
+        }),
+        timeout: 15000
       });
 
       const data = await response.json();
