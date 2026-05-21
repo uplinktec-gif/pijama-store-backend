@@ -67,7 +67,7 @@ class AuthModal {
               <div class="auth-form-group">
                 <label>CPF <span style="font-size:12px;color:#aaa;font-weight:400">(sua senha)</span></label>
                 <input
-                  type="password"
+                  type="text"
                   id="loginCpf"
                   placeholder="000.000.000-00"
                   autocomplete="off"
@@ -184,11 +184,33 @@ class AuthModal {
     const cpfInput = document.getElementById('loginCpf');
     if (cpfInput) {
       cpfInput.addEventListener('input', (e) => {
-        let v = e.target.value.replace(/\D/g, '').slice(0, 11);
-        if (v.length > 9) v = `${v.slice(0,3)}.${v.slice(3,6)}.${v.slice(6,9)}-${v.slice(9)}`;
-        else if (v.length > 6) v = `${v.slice(0,3)}.${v.slice(3,6)}.${v.slice(6)}`;
-        else if (v.length > 3) v = `${v.slice(0,3)}.${v.slice(3)}`;
-        e.target.value = v;
+        const input = e.target;
+        const cursorPos = input.selectionStart;
+        const anterior = input.value;
+
+        // Pegar só os dígitos digitados até agora
+        let digits = anterior.replace(/\D/g, '').slice(0, 11);
+
+        // Formatar
+        let formatted = digits;
+        if (digits.length > 9) formatted = `${digits.slice(0,3)}.${digits.slice(3,6)}.${digits.slice(6,9)}-${digits.slice(9)}`;
+        else if (digits.length > 6) formatted = `${digits.slice(0,3)}.${digits.slice(3,6)}.${digits.slice(6)}`;
+        else if (digits.length > 3) formatted = `${digits.slice(0,3)}.${digits.slice(3)}`;
+
+        if (input.value !== formatted) {
+          // Ajustar cursor: contar quantos dígitos havia antes da posição do cursor
+          const digitsBeforeCursor = anterior.slice(0, cursorPos).replace(/\D/g, '').length;
+          input.value = formatted;
+
+          // Reposicionar cursor na posição equivalente
+          let newPos = 0;
+          let digitsCount = 0;
+          for (let i = 0; i < formatted.length; i++) {
+            if (/\d/.test(formatted[i])) digitsCount++;
+            if (digitsCount === digitsBeforeCursor) { newPos = i + 1; break; }
+          }
+          input.setSelectionRange(newPos, newPos);
+        }
       });
     }
 
@@ -220,10 +242,17 @@ class AuthModal {
     }
 
     // Fechar modal ao clicar no overlay (fora da modal)
+    // Usa mousedown para rastrear onde o clique COMEÇOU —
+    // evita fechar quando o usuário clicou dentro e arrastou o mouse pra fora
+    let mouseDownNoOverlay = false;
+    this.overlay.addEventListener('mousedown', (e) => {
+      mouseDownNoOverlay = (e.target === this.overlay);
+    });
     this.overlay.addEventListener('click', (e) => {
-      if (e.target === this.overlay) {
+      if (e.target === this.overlay && mouseDownNoOverlay) {
         this.fecharModal();
       }
+      mouseDownNoOverlay = false;
     });
 
     // Fechar com ESC
