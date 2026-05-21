@@ -235,7 +235,7 @@ footer strong { color: white; }
   .hero { padding: 40px 20px 35px; }
 }
 </style>
-<link rel="stylesheet" href="/css/auth-modal.css?v=20260521d">
+<link rel="stylesheet" href="/css/auth-modal.css?v=20260521e">
 </head>
 <body>
 
@@ -250,12 +250,14 @@ footer strong { color: white; }
       <a href="#produtos">Coleção</a>
       <a href="https://wa.me/5595991268494?text=Oi%2C+vim+do+site!">WhatsApp</a>
     </nav>
-    <button class="btn-auth-header" onclick="authModal ? authModal.abrirModal() : null">Entrar</button>
-    <button class="cart-btn" onclick="toggleCart()">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
-      Carrinho
-      <span class="cart-count" id="cart-count">0</span>
-    </button>
+    <div style="display:flex;align-items:center;gap:8px">
+      <button class="btn-auth-header" onclick="authModal ? authModal.abrirModal() : null">Entrar</button>
+      <button class="cart-btn" onclick="toggleCart()">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+        Carrinho
+        <span class="cart-count" id="cart-count">0</span>
+      </button>
+    </div>
   </div>
 </header>
 
@@ -1318,6 +1320,6 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') { closeProductModal(); closeCheckout(); }
 });
 </script>
-<script src="/js/auth-modal.js?v=20260521d"></script>
+<script src="/js/auth-modal.js?v=20260521e"></script>
 </body>
 </html>
