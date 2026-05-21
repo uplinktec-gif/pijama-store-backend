@@ -53,18 +53,31 @@ class AuthModal {
               <div id="loginSuccess" class="auth-success"></div>
 
               <div class="auth-form-group">
-                <label>CPF</label>
+                <label>Celular com DDD</label>
                 <input
-                  type="text"
+                  type="tel"
+                  id="loginCelular"
+                  placeholder="(95) 98765-4321"
+                  autocomplete="tel"
+                  inputmode="numeric"
+                  maxlength="16"
+                >
+              </div>
+
+              <div class="auth-form-group">
+                <label>CPF <span style="font-size:12px;color:#aaa;font-weight:400">(sua senha)</span></label>
+                <input
+                  type="password"
                   id="loginCpf"
-                  placeholder="00000000000"
+                  placeholder="000.000.000-00"
                   autocomplete="off"
                   inputmode="numeric"
+                  maxlength="14"
                 >
               </div>
 
               <button type="submit" class="auth-btn" id="loginCpfBtn">
-                <span class="btn-text">Entrar com CPF</span>
+                <span class="btn-text">Entrar</span>
                 <span class="auth-loading" style="display:none;"></span>
               </button>
 
@@ -152,7 +165,32 @@ class AuthModal {
       tab.addEventListener('click', (e) => {
         this.trocarTab(e.target.dataset.tab);
       });
+
     });
+
+    // Formatação automática — celular: (95) 98765-4321
+    const celularInput = document.getElementById('loginCelular');
+    if (celularInput) {
+      celularInput.addEventListener('input', (e) => {
+        let v = e.target.value.replace(/\D/g, '').slice(0, 11);
+        if (v.length > 6) v = `(${v.slice(0,2)}) ${v.slice(2,7)}-${v.slice(7)}`;
+        else if (v.length > 2) v = `(${v.slice(0,2)}) ${v.slice(2)}`;
+        else if (v.length > 0) v = `(${v}`;
+        e.target.value = v;
+      });
+    }
+
+    // Formatação automática — CPF: 000.000.000-00
+    const cpfInput = document.getElementById('loginCpf');
+    if (cpfInput) {
+      cpfInput.addEventListener('input', (e) => {
+        let v = e.target.value.replace(/\D/g, '').slice(0, 11);
+        if (v.length > 9) v = `${v.slice(0,3)}.${v.slice(3,6)}.${v.slice(6,9)}-${v.slice(9)}`;
+        else if (v.length > 6) v = `${v.slice(0,3)}.${v.slice(3,6)}.${v.slice(6)}`;
+        else if (v.length > 3) v = `${v.slice(0,3)}.${v.slice(3)}`;
+        e.target.value = v;
+      });
+    }
 
     // Login form
     const loginForm = document.getElementById('loginForm');
@@ -197,14 +235,24 @@ class AuthModal {
   }
 
   /**
-   * LOGIN COM CPF - Primeira etapa
+   * LOGIN COM CELULAR + CPF
    */
   async loginComCPF() {
+    const celularInput = document.getElementById('loginCelular');
     const cpfInput = document.getElementById('loginCpf');
-    const cpf = cpfInput.value.replace(/\D/g, '');
+
+    const celular = (celularInput?.value || '').replace(/\D/g, '');
+    const cpf = (cpfInput?.value || '').replace(/\D/g, '');
+
+    if (!celular || celular.length < 10) {
+      this.mostrarErro('login', 'Informe o celular com DDD. Ex: (95) 98765-4321');
+      celularInput?.focus();
+      return;
+    }
 
     if (!cpf || cpf.length !== 11) {
       this.mostrarErro('login', 'CPF inválido. Use 11 dígitos.');
+      cpfInput?.focus();
       return;
     }
 
@@ -212,29 +260,26 @@ class AuthModal {
     this.limparMensagens('login');
 
     try {
-      const response = await fetch('/auth/cliente/cpf', {
+      const response = await fetch('/auth/cliente/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cpf })
+        body: JSON.stringify({ celular, cpf })
       });
 
       const data = await response.json();
 
       if (!response.ok) {
         if (response.status === 404) {
-          // Cliente não encontrado → mostrar opção de cadastro
-          this.mostrarMensagem('login', 'Cliente não encontrado. Vamos criar uma conta?', 'aviso');
-          // Pré-preencher CPF no cadastro e trocar tab
-          document.getElementById('cadastroCpf').value = cpf;
+          this.mostrarMensagem('login', 'Número não encontrado. Vamos criar uma conta?', 'aviso');
           setTimeout(() => this.trocarTab('cadastro'), 1500);
         } else {
-          this.mostrarErro('login', data.mensagem || 'Erro ao fazer login');
+          this.mostrarErro('login', data.mensagem || 'Celular ou CPF incorretos.');
         }
         return;
       }
 
-      // Cliente encontrado - pedir confirmação de identidade
-      this.mostrarConfirmacaoIdentidade(cpf, data.ultimos_2_digitos);
+      // Login com sucesso!
+      this.onLoginSuccess(data);
 
     } catch (error) {
       this.mostrarErro('login', 'Erro de conexão. Tente novamente.');
