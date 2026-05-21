@@ -471,20 +471,232 @@ class AuthModal {
     if (!btn) return;
 
     if (this.clienteInfo && this.token) {
-      // Extrair primeiro e último nome e capitalizar
       const nomeCompleto = this.clienteInfo.nome || 'Cliente';
       const nomeFormatado = this.extrairPrimeiroUltimoNome(nomeCompleto);
 
-      btn.innerHTML = `Bem-vindo, ${nomeFormatado}!`;
-      btn.classList.add('logado');
-      btn.onclick = () => this.logout();
-      btn.title = 'Clique para sair';
+      // Substituir botão simples por wrapper com dropdown
+      const wrapper = document.createElement('div');
+      wrapper.className = 'user-menu-wrapper';
+      wrapper.id = 'userMenuWrapper';
+
+      wrapper.innerHTML = `
+        <button class="btn-auth-header logado" id="userMenuBtn" title="Minha conta">
+          <span>👤 ${nomeFormatado}</span>
+          <span class="user-chevron">▼</span>
+        </button>
+        <div class="user-dropdown" id="userDropdown">
+          <div class="user-dropdown-header">
+            <div class="user-dropdown-name">${nomeCompleto}</div>
+            <div class="user-dropdown-sub">Minha conta</div>
+          </div>
+          <button class="user-dropdown-item" id="btnMeusPedidos">
+            <span class="item-icon">📦</span> Meus Pedidos
+          </button>
+          <div class="user-dropdown-divider"></div>
+          <button class="user-dropdown-item danger" id="btnLogout">
+            <span class="item-icon">🚪</span> Sair
+          </button>
+        </div>
+      `;
+
+      // Substituir o btn original pelo wrapper
+      btn.parentNode.replaceChild(wrapper, btn);
+
+      // Abrir/fechar dropdown ao clicar no botão
+      document.getElementById('userMenuBtn').addEventListener('click', (e) => {
+        e.stopPropagation();
+        wrapper.classList.toggle('open');
+      });
+
+      // Fechar ao clicar fora
+      document.addEventListener('click', () => wrapper.classList.remove('open'));
+
+      // Ações do menu
+      document.getElementById('btnMeusPedidos').addEventListener('click', () => {
+        wrapper.classList.remove('open');
+        this.abrirModalPedidos();
+      });
+
+      document.getElementById('btnLogout').addEventListener('click', () => {
+        wrapper.classList.remove('open');
+        this.logout();
+      });
+
     } else {
-      btn.innerHTML = 'Entrar';
-      btn.classList.remove('logado');
-      btn.onclick = () => this.abrirModal();
-      btn.title = 'Clique para fazer login';
+      // Não logado — restaurar botão simples se necessário
+      const wrapper = document.getElementById('userMenuWrapper');
+      if (wrapper) {
+        const btn = document.createElement('button');
+        btn.className = 'btn-auth-header';
+        btn.textContent = 'Entrar';
+        btn.title = 'Clique para fazer login';
+        btn.onclick = () => this.abrirModal();
+        wrapper.parentNode.replaceChild(btn, wrapper);
+      } else {
+        const b = document.querySelector('.btn-auth-header');
+        if (b) {
+          b.innerHTML = 'Entrar';
+          b.classList.remove('logado');
+          b.onclick = () => this.abrirModal();
+          b.title = 'Clique para fazer login';
+        }
+      }
     }
+  }
+
+  // ─────────────────────────────────────────────
+  // MODAL MEUS PEDIDOS
+  // ─────────────────────────────────────────────
+
+  abrirModalPedidos() {
+    // Criar overlay se não existir
+    let overlay = document.getElementById('pedidosModalOverlay');
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.className = 'pedidos-modal-overlay';
+      overlay.id = 'pedidosModalOverlay';
+      overlay.innerHTML = `
+        <div class="pedidos-modal" id="pedidosModal">
+          <div class="pedidos-modal-header">
+            <span class="pedidos-modal-title">📦 Meus Pedidos</span>
+            <button class="pedidos-modal-close" id="fecharPedidosModal">✕</button>
+          </div>
+          <div class="pedidos-modal-body" id="pedidosModalBody">
+            <div class="pedidos-loading">
+              <span class="pedidos-loading-spinner">⏳</span>
+              Carregando seus pedidos...
+            </div>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(overlay);
+
+      // Fechar ao clicar fora ou no X
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) this.fecharModalPedidos();
+      });
+      document.getElementById('fecharPedidosModal').addEventListener('click', () => this.fecharModalPedidos());
+    }
+
+    overlay.classList.add('open');
+    this.carregarPedidos();
+  }
+
+  fecharModalPedidos() {
+    const overlay = document.getElementById('pedidosModalOverlay');
+    if (overlay) overlay.classList.remove('open');
+  }
+
+  async carregarPedidos() {
+    const body = document.getElementById('pedidosModalBody');
+    if (!body) return;
+
+    try {
+      // Extrair id do cliente do token
+      const payload = this.token ? JSON.parse(atob(this.token.split('.')[1])) : null;
+      const idCliente = payload?.id_cliente || payload?.clienteId || this.clienteInfo?.id_cliente;
+
+      if (!idCliente) {
+        body.innerHTML = '<div class="pedidos-vazio">⚠️ Não foi possível identificar sua conta.</div>';
+        return;
+      }
+
+      const res = await fetch(`/api/cliente/${idCliente}/pedidos`, {
+        headers: { 'Authorization': `Bearer ${this.token}` }
+      });
+
+      if (!res.ok) throw new Error('Erro ao buscar pedidos');
+
+      const data = await res.json();
+      const pedidos = data.pedidos || [];
+
+      if (pedidos.length === 0) {
+        body.innerHTML = `
+          <div class="pedidos-vazio">
+            <div style="font-size:40px;margin-bottom:12px">🛍️</div>
+            Você ainda não fez nenhum pedido.<br>
+            <small style="color:#bbb">Explore nossa coleção e faça seu primeiro!</small>
+          </div>`;
+        return;
+      }
+
+      body.innerHTML = pedidos.map(p => this.renderPedidoCard(p)).join('');
+
+    } catch (err) {
+      console.error('[pedidos] Erro:', err);
+      body.innerHTML = `<div class="pedidos-vazio">❌ Erro ao carregar pedidos. Tente novamente.</div>`;
+    }
+  }
+
+  renderPedidoCard(p) {
+    // Badges de status
+    const badgePagto = this.badgePagamento(p.status_pagamento);
+    const badgeEntrega = this.badgeEntrega(p.status_entrega);
+
+    // Itens formatados
+    let itensTexto = p.descricao_pedido || '—';
+    try {
+      const itens = JSON.parse(p.itens_json || '[]');
+      if (itens.length > 0) {
+        itensTexto = itens.map(i => `${i.quantidade || 1}x ${i.modelo} ${i.tamanho} ${i.cor}`).join(' · ');
+      }
+    } catch (_) {}
+
+    // Data formatada
+    const data = p.data_pedido ? new Date(p.data_pedido).toLocaleDateString('pt-BR') : '—';
+
+    // Valor formatado
+    const valor = p.valor_total ? `R$ ${parseFloat(p.valor_total).toFixed(2).replace('.', ',')}` : '—';
+
+    // Info de entrega
+    let entregaInfo = '';
+    if (p.status_entrega === 'ENTREGUE' && p.data_entrega) {
+      entregaInfo = `Entregue em ${new Date(p.data_entrega).toLocaleDateString('pt-BR')}`;
+    } else if (p.tipo_entrega === 'RETIRADA') {
+      entregaInfo = 'Retirada na loja';
+    } else if (p.endereco_entrega) {
+      entregaInfo = p.endereco_entrega;
+    }
+
+    return `
+      <div class="pedido-card">
+        <div class="pedido-card-header">
+          <div>
+            <div class="pedido-numero">Pedido #${p.numero_pedido}</div>
+            <div class="pedido-data">${data}</div>
+          </div>
+          <div class="pedido-badges">
+            ${badgePagto}
+            ${badgeEntrega}
+          </div>
+        </div>
+        <div class="pedido-itens">${itensTexto}</div>
+        <div class="pedido-footer">
+          <span class="pedido-valor">${valor}</span>
+          ${entregaInfo ? `<span class="pedido-entrega-info">📍 ${entregaInfo}</span>` : ''}
+        </div>
+      </div>`;
+  }
+
+  badgePagamento(status) {
+    const map = {
+      'PAGO':      ['badge-pago',      '✅ Pago'],
+      'PEDIDO':    ['badge-pendente',  '⏳ Aguardando pagamento'],
+      'CANCELADO': ['badge-cancelado', '❌ Cancelado'],
+    };
+    const [cls, label] = map[status] || ['badge-pendente', status || '—'];
+    return `<span class="badge-status ${cls}">${label}</span>`;
+  }
+
+  badgeEntrega(status) {
+    const map = {
+      'ENTREGUE':         ['badge-entregue', '📬 Entregue'],
+      'RETIRADA_NA_LOJA': ['badge-retirada', '🏪 Retirado'],
+      'EM_TRANSITO':      ['badge-transito', '🚚 A caminho'],
+      'PENDENTE':         ['badge-pendente', '📦 Em preparo'],
+    };
+    const [cls, label] = map[status] || ['badge-pendente', status || '—'];
+    return `<span class="badge-status ${cls}">${label}</span>`;
   }
 
   /**

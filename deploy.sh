@@ -78,10 +78,10 @@ if [ -f ".env" ]; then
     && ok ".env enviado" || echo "  (aviso: falha ao enviar .env, usando o existente)"
 fi
 
-# 8. Instala dependências na VPS (sql.js é novo)
+# 8. Instala dependências na VPS (usa nvm)
 info "Instalando dependências na VPS (pode levar ~30s)..."
 ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$VPS_USER@$VPS_IP" \
-  "cd $VPS_DIR && $VPS_NPM install --omit=dev --silent 2>&1 | tail -3" \
+  'export NVM_DIR="$HOME/.nvm" && [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" && cd '"$VPS_DIR"' && npm install --omit=dev --silent 2>&1 | tail -3' \
   || err "Falha no npm install"
 ok "Dependências instaladas"
 
@@ -97,15 +97,18 @@ ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$VPS_USER@$VPS_IP" \
   fi"
 ok "Banco de dados verificado"
 
-# 10. Mata processo anterior e reinicia
+# 10. Mata processo anterior e reinicia com nvm
 info "Reiniciando servidor na VPS..."
 ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$VPS_USER@$VPS_IP" \
-  "fuser -k 3000/tcp 2>/dev/null; pkill -f 'node.*server.js' 2>/dev/null; sleep 3
-   LOG=\"$VPS_DIR/logs/combined-\$(date +%Y-%m-%d).log\"
-   cd $VPS_DIR
-   nohup $VPS_NODE server.js >> \"\$LOG\" 2>&1 &
-   echo \$! > /tmp/pijama-store.pid
-   echo \"PID: \$(cat /tmp/pijama-store.pid)\"" 2>/dev/null
+  'export NVM_DIR="$HOME/.nvm" && [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
+   kill -9 $(lsof -ti :3000) 2>/dev/null
+   pkill -9 -f "pijama-store/server.js" 2>/dev/null
+   sleep 3
+   LOG="'"$VPS_DIR"'/logs/combined-$(date +%Y-%m-%d).log"
+   cd '"$VPS_DIR"'
+   nohup node server.js >> "$LOG" 2>&1 &
+   echo $! > /tmp/pijama-store.pid
+   echo "PID: $(cat /tmp/pijama-store.pid)"' 2>/dev/null
 sleep 8
 
 # 11. Health check

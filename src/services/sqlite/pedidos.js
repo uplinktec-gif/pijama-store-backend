@@ -160,6 +160,21 @@ export async function listarTodosPendentes() {
 }
 
 /**
+ * Busca pedidos por WhatsApp do cliente
+ */
+export async function buscarPedidosPorWhatsApp(whatsapp) {
+  try {
+    return query(
+      'SELECT * FROM pedidos WHERE cliente_whatsapp = ? ORDER BY numero_pedido DESC',
+      [whatsapp]
+    ).map(mapPedido);
+  } catch (error) {
+    logger.error('[sqlite:pedidos] buscarPedidosPorWhatsApp:', error.message);
+    return [];
+  }
+}
+
+/**
  * Busca pedidos por nome de cliente (busca parcial, case-insensitive)
  */
 export async function buscarPedidosPorCliente(nomeCliente) {

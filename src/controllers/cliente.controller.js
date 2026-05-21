@@ -1,8 +1,8 @@
 import { gerarTokenSessao } from '../utils/sessionTokens.js';
 import { logger } from '../utils/logger.js';
-import { buscarClientePorCPF, obterClientePorId } from '../services/sheets/clientes.js';
-import { buscarPedidosPorCliente } from '../services/sheets/pedidos.js';
-import { salvarMensagemSuporte } from '../services/sheets/suporte.js';
+import { buscarClientePorCPF, obterClientePorId } from '../services/sqlite/clientes.js';
+import { buscarPedidosPorCliente, buscarPedidosPorWhatsApp } from '../services/sqlite/pedidos.js';
+import { salvarMensagemSuporte } from '../services/sqlite/suporte.js';
 import { enviarMensagem } from '../services/whatsapp/sender.js';
 import { callAI } from '../config/gemini.js';
 
@@ -99,21 +99,31 @@ export const obterPedidosCliente = async (req, res) => {
       });
     }
 
-    // Buscar pedidos por WhatsApp do cliente
-    const pedidos = await buscarPedidosPorCliente(cliente.whatsapp);
+    // Buscar pedidos por WhatsApp do cliente (SQLite)
+    const pedidos = await buscarPedidosPorWhatsApp(cliente.whatsapp);
 
-    // Formatar resposta
-    const pedidosFormatados = (pedidos || []).map(p => ({
-      numero: p.numero_pedido,
-      data: p.data_pedido,
-      itens: JSON.parse(p.itens_json || '[]'),
-      valor_total: parseFloat(p.valor_total),
-      status_pagamento: p.status_pagamento,
-      status_entrega: p.status_entrega,
-      data_entrega: p.data_entrega,
-      tipo_entrega: p.tipo_entrega,
-      endereco_entrega: p.endereco_entrega
-    }));
+    // Formatar resposta — manter campos que o frontend usa
+    const pedidosFormatados = (pedidos || []).map(p => {
+      let itens = [];
+      try { itens = JSON.parse(p.itens_json || '[]'); } catch (_) {}
+      return {
+        numero_pedido: p.numero_pedido,
+        numero: p.numero_pedido,       // alias para compatibilidade
+        data_pedido: p.data_pedido,
+        data: p.data_pedido,           // alias
+        descricao_pedido: p.descricao_pedido,
+        itens_json: p.itens_json,
+        itens,
+        valor_total: parseFloat(p.valor_total) || 0,
+        status_pagamento: p.status_pagamento,
+        status_entrega: p.status_entrega,
+        forma_pagamento: p.forma_pagamento,
+        data_pagamento: p.data_pagamento,
+        data_entrega: p.data_entrega,
+        tipo_entrega: p.tipo_entrega,
+        endereco_entrega: p.endereco_entrega
+      };
+    });
 
     logger.debug(`[pedidos] ✓ ${pedidosFormatados.length} pedidos para cliente ${id}`);
 
