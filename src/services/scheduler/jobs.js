@@ -2,10 +2,10 @@ import schedule from 'node-schedule';
 import { logger } from '../../utils/logger.js';
 import * as senderService from '../whatsapp/sender.js';
 import { gerarRelatorioDiario, analisarEstoque, analisarVendas } from '../business/analytics.js';
-import * as estoqueSheets from '../sheets/estoque.js';
+import * as estoqueSheets from '../sqlite/estoque.js';
 import { gerarRecomendacaoCliente } from '../business/recomendacoes.js';
-import * as clientesSheets from '../sheets/clientes.js';
-import { realizarBackup } from '../backup/backupSheets.js';
+import * as clientesSheets from '../sqlite/clientes.js';
+import { realizarBackup } from '../backup/backupSQLite.js';
 import { obterRoleUsuario, temPermissao } from '../../config/users.js';
 
 // Números de telefone autorizados (Felipe e Júlly)

@@ -1,6 +1,6 @@
 import { logger } from '../../utils/logger.js';
-import * as clientesSheets from '../sheets/clientes.js';
-import * as pedidosSheets from '../sheets/pedidos.js';
+import * as clientesSheets from '../sqlite/clientes.js';
+import * as pedidosSheets from '../sqlite/pedidos.js';
 
 /**
  * Obtém perfil completo do cliente com estatísticas

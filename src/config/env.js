@@ -2,8 +2,7 @@ import dotenv from 'dotenv';
 dotenv.config({ override: true });
 
 const requiredVars = [
-  'GOOGLE_SHEETS_CREDENTIALS_PATH',
-  'GOOGLE_SHEETS_ID',
+  // Google Sheets removido — agora usa SQLite local
   'WHATSAPP_VERIFY_TOKEN',
   'ANTHROPIC_API_KEY',
   'EVOLUTION_API_KEY',
@@ -56,7 +55,19 @@ const env = {
   authorizedNumbers: (process.env.AUTHORIZED_WHATSAPP_NUMBERS || '')
     .split(',')
     .map(n => n.trim())
-    .filter(Boolean)
+    .filter(Boolean),
+
+  // Números dos usuários (para notificações e relatórios)
+  numeroFelipe: process.env.NUMERO_FELIPE || '95981188675',
+  numeroJully: process.env.NUMERO_JULLY || '95981225668',
+  numeroPluma: process.env.NUMERO_PLUMA || '95991268494',
+
+  // Banco de dados SQLite
+  dbPath: process.env.DB_PATH || './data/pijama-store.db',
+
+  // Painel Admin
+  adminAllowedIps: process.env.ADMIN_ALLOWED_IPS || '127.0.0.1,::1,::ffff:127.0.0.1',
+  adminToken: process.env.ADMIN_TOKEN || null
 };
 
 export { env };

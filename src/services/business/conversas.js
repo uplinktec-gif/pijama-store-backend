@@ -1,12 +1,12 @@
 import { logger } from '../../utils/logger.js';
-import * as sheetConversas from '../sheets/conversas.js';
+import * as sheetConversas from '../sqlite/conversas.js';
 import * as pedidosService from './pedidos.js';
 import { analisarVendas } from './analytics.js';
 import { gerarRecomendacaoCliente, gerarRecomendacaoEstoque } from './recomendacoes.js';
 import { temPermissao, obterInfoUsuario, ROLES } from '../../config/users.js';
 import { callAI } from '../../config/gemini.js';
-import * as sheetsEstoque from '../sheets/estoque.js';
-import * as sheetsPedidos from '../sheets/pedidos.js';
+import * as sheetsEstoque from '../sqlite/estoque.js';
+import * as sheetsPedidos from '../sqlite/pedidos.js';
 import { enviarMensagem } from '../whatsapp/sender.js';
 
 // ---------------------------------------------------------------------------
@@ -153,8 +153,10 @@ async function processarComClaude(mensagem, clienteWhatsApp, contexto) {
     : 'Nenhum contexto anterior.';
 
 
+  const agora = new Date().toLocaleString('pt-BR', { timeZone: 'America/Boa_Vista' });
   const systemPrompt = `Você é assistente da loja Pluma Pijamas (Boa Vista-RR). Responde via WhatsApp.
 Usuário: ${nomeUsuario} (${roleUsuario}).
+Data/Hora: ${agora} (Horário de Boa Vista)
 
 ESTOQUE ATUAL:
 ${listaPlanaEstoque}
@@ -334,15 +336,193 @@ function responderSemClaude(mensagem, clienteWhatsApp, resumoEstoque) {
 // Função principal exportada
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Fast-Path: detecta ações comuns sem chamar o Claude (economiza ~70% das calls)
+// ---------------------------------------------------------------------------
+const FAST_PATH_RULES = [
+  // Saudações simples
+  { regex: /^(oi|olá|ola|hey|bom dia|boa tarde|boa noite|eai|e aí|menu|ajuda|socorro|opa|oii|oeee?)$/i, action: 'saudacao' },
+  // Listar pedidos abertos
+  { regex: /^(@?pedidos?|@?pendentes?|abertos?)$/i, action: 'listar_pedidos_abertos' },
+  // Analytics
+  { regex: /^@estoque$/i, action: '@estoque' },
+  { regex: /^@(an[aá]lise|analysis|vendas|relat[oó]rio?)$/i, action: '@analise' },
+  { regex: /^@atualizar\s+/i, action: '@atualizar' },
+  // Confirmar pagamento: "pedido 5 pago pix" / "5 pago" / "pago pedido 5" / "pago 5 pix"
+  {
+    regex: /(?:pedido\s+)?#?(\d+)\s+pag[oa](?:u|ment[oa])?\s*(pix|cart[aã]o|dinheiro|boleto)?/i,
+    action: 'confirmar_pagamento',
+    extract: m => ({ numero_pedido: parseInt(m[1]), forma_pagamento: (m[2] || '').toUpperCase() || null })
+  },
+  {
+    regex: /pag[oa](?:u|ment[oa])?\s+(?:pedido\s+)?#?(\d+)\s*(pix|cart[aã]o|dinheiro|boleto)?/i,
+    action: 'confirmar_pagamento',
+    extract: m => ({ numero_pedido: parseInt(m[1]), forma_pagamento: (m[2] || '').toUpperCase() || null })
+  },
+  // Atualizar entrega
+  {
+    regex: /entregue?\s+(?:pedido\s+)?#?(\d+)/i,
+    action: 'atualizar_entrega',
+    extract: m => ({ numero_pedido: parseInt(m[1]), tipo_entrega: 'ENTREGUE' })
+  },
+  {
+    regex: /retirou?\s+(?:pedido\s+)?#?(\d+)/i,
+    action: 'atualizar_entrega',
+    extract: m => ({ numero_pedido: parseInt(m[1]), tipo_entrega: 'RETIRADA_NA_LOJA' })
+  },
+];
+
+/**
+ * Tenta detectar ação por regex sem chamar Claude.
+ * Retorna { action, dados } ou null.
+ */
+function fastPath(mensagem, contexto) {
+  const msg = mensagem.trim();
+
+  for (const rule of FAST_PATH_RULES) {
+    const match = msg.match(rule.regex);
+    if (match) {
+      const dados = rule.extract ? rule.extract(match) : {};
+      return { action: rule.action, dados };
+    }
+  }
+
+  // Endereço: contexto aguardando endereço
+  if (contexto?.aguardando_endereco && msg.length > 5) {
+    return { action: 'salvar_endereco', dados: { endereco: msg, numero_pedido: contexto.aguardando_endereco } };
+  }
+
+  return null;
+}
+
+/**
+ * Chama processarComClaude com retry + backoff exponencial
+ */
+async function processarComClaudeComRetry(mensagem, clienteWhatsApp, contexto, maxTentativas = 3) {
+  for (let i = 1; i <= maxTentativas; i++) {
+    try {
+      return await processarComClaude(mensagem, clienteWhatsApp, contexto);
+    } catch (err) {
+      logger.warn(`[Claude] Tentativa ${i}/${maxTentativas} falhou: ${err.message}`);
+      if (i === maxTentativas) {
+        logger.error(`[Claude] Todas as tentativas falharam, usando fallback`);
+        const estoque = await sheetsEstoque.readAllEstoque().catch(() => []);
+        return responderSemClaude(mensagem, clienteWhatsApp, gerarResumoEstoque(estoque));
+      }
+      await new Promise(r => setTimeout(r, 1000 * i));
+    }
+  }
+}
+
 /**
  * Processa mensagem com suporte a contexto multi-turno.
  * Comandos @ específicos vão para analytics; tudo mais passa pelo Claude.
  */
 async function processarMensagemComContexto(mensagem, clienteWhatsApp) {
+  const inicio = Date.now();
+  let usouFastPath = false;
+
   try {
     // 1. Carregar contexto existente
     const contextoCarregado = await sheetConversas.carregarContexto(clienteWhatsApp);
     const contexto = contextoCarregado?.contexto || {};
+
+    // ⚡ FAST-PATH: Verificar se conseguimos responder sem Claude
+    const fp = fastPath(mensagem, contexto);
+    if (fp) {
+      usouFastPath = true;
+      logger.info(`[FastPath] action=${fp.action} | ${clienteWhatsApp.slice(-4)} | "${mensagem.substring(0, 40)}"`);
+
+      // Tratar ação de endereço diretamente
+      if (fp.action === 'salvar_endereco') {
+        const numPedido = fp.dados.numero_pedido;
+        await sheetsPedidos.atualizarEnderecoEntrega(numPedido, fp.dados.endereco).catch(() => {});
+        await sheetConversas.salvarContexto(clienteWhatsApp, { ...contexto, aguardando_endereco: null }).catch(() => {});
+        logger.info(`[FastPath] Endereço salvo em ${Date.now() - inicio}ms`);
+        return {
+          success: true,
+          resposta: `✅ Endereço salvo no pedido *#${numPedido}*!\n📍 ${fp.dados.endereco}`,
+          tipo: 'ENDERECO_ENTREGA'
+        };
+      }
+
+      // Tratar saudação
+      if (fp.action === 'saudacao') {
+        const resposta = gerarSaudacao(clienteWhatsApp);
+        logger.info(`[FastPath] Saudação em ${Date.now() - inicio}ms`);
+        return { success: true, resposta, tipo: 'SAUDACAO' };
+      }
+
+      // Tratar listar pedidos abertos
+      if (fp.action === 'listar_pedidos_abertos') {
+        const pedidosAbertos = await sheetsPedidos.listarTodosPendentes();
+        const resposta = formatarPedidosAbertos(pedidosAbertos);
+        logger.info(`[FastPath] Pedidos listados em ${Date.now() - inicio}ms`);
+        return { success: true, resposta, tipo: 'LISTAR_PEDIDOS' };
+      }
+
+      // Tratar analytics via fast-path
+      if (fp.action === '@estoque') {
+        if (!temPermissao(clienteWhatsApp, 'ANALYTICS_ESTOQUE')) {
+          return { success: false, resposta: '❌ Sem permissão para ver estoque.', tipo: 'ANALYTICS_ESTOQUE' };
+        }
+        const resposta = await processarAnalyticsEstoque();
+        return { success: true, resposta, tipo: 'ANALYTICS_ESTOQUE' };
+      }
+
+      if (fp.action === '@analise') {
+        if (!temPermissao(clienteWhatsApp, 'ANALYTICS_VENDAS')) {
+          return { success: false, resposta: '❌ Sem permissão para ver análise.', tipo: 'ANALYTICS_VENDAS' };
+        }
+        const resposta = await processarAnalyticsVendas();
+        return { success: true, resposta, tipo: 'ANALYTICS_VENDAS' };
+      }
+
+      if (fp.action === '@atualizar') {
+        if (!temPermissao(clienteWhatsApp, 'ANALYTICS_ESTOQUE')) {
+          return { success: false, resposta: '❌ Sem permissão para atualizar estoque.', tipo: 'ATUALIZAR_ESTOQUE' };
+        }
+        const matchAtualizar = mensagem.match(/@atualizar\s+(\w+)\s+(\w+)\s+([\w\s]+?)\s+(\d+)$/i);
+        if (matchAtualizar) {
+          const [, modelo, tamanho, cor, qtdStr] = matchAtualizar;
+          const resposta = await processarAtualizarEstoque(modelo, tamanho, cor.trim(), parseInt(qtdStr));
+          return { success: true, resposta, tipo: 'ATUALIZAR_ESTOQUE' };
+        }
+      }
+
+      // Fast-path para confirmar_pagamento
+      if (fp.action === 'confirmar_pagamento') {
+        const { numero_pedido, forma_pagamento } = fp.dados;
+        if (numero_pedido) {
+          await sheetsPedidos.atualizarStatusPagamento(numero_pedido, 'PAGO', forma_pagamento || 'PENDENTE').catch(() => {});
+          notificarClientePagamento(numero_pedido).catch(() => {});
+          await sheetConversas.salvarContexto(clienteWhatsApp, { ...contexto, pagamento_confirmado: true }, 'FINALIZADA').catch(() => {});
+          const formaStr = forma_pagamento ? ` no ${forma_pagamento}` : '';
+          logger.info(`[FastPath] Pagamento confirmado #${numero_pedido} em ${Date.now() - inicio}ms`);
+          return {
+            success: true,
+            resposta: `✅ Pagamento${formaStr} do pedido *#${numero_pedido}* confirmado! Obrigado 🙏`,
+            tipo: 'CONFIRMAR_PAGAMENTO'
+          };
+        }
+      }
+
+      // Fast-path para atualizar_entrega
+      if (fp.action === 'atualizar_entrega') {
+        const { numero_pedido, tipo_entrega } = fp.dados;
+        if (numero_pedido) {
+          await sheetsPedidos.atualizarStatusEntrega(numero_pedido, tipo_entrega).catch(() => {});
+          notificarClienteEntrega(numero_pedido, tipo_entrega).catch(() => {});
+          const emoji = tipo_entrega === 'ENTREGUE' ? '✅' : '🏪';
+          logger.info(`[FastPath] Entrega #${numero_pedido} em ${Date.now() - inicio}ms`);
+          return {
+            success: true,
+            resposta: `${emoji} Pedido *#${numero_pedido}* marcado como ${tipo_entrega === 'ENTREGUE' ? 'entregue' : 'retirado'}!`,
+            tipo: 'ATUALIZAR_ENTREGA'
+          };
+        }
+      }
+    }
 
     // 2. Detectar comandos @ específicos (alta prioridade)
     const tipoComando = detectarComandoAnalitics(mensagem);
@@ -503,9 +683,9 @@ async function processarMensagemComContexto(mensagem, clienteWhatsApp) {
       return { success: true, resposta, tipo: tipoComando, contextoAtualizado: false };
     }
 
-    // --- Para TODAS as outras mensagens: Claude decide ---
-    const resultado = await processarComClaude(mensagem, clienteWhatsApp, contexto);
-    logger.info(`[Claude action] ${resultado.action}`, { clienteWhatsApp });
+    // --- Para TODAS as outras mensagens: Claude decide (com retry) ---
+    const resultado = await processarComClaudeComRetry(mensagem, clienteWhatsApp, contexto);
+    logger.info(`[Claude] action=${resultado.action} | ${clienteWhatsApp.slice(-4)} | ${Date.now() - inicio}ms | fastPath=${usouFastPath}`);
 
     switch (resultado.action) {
       case 'criar_pedido': {

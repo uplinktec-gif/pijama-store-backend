@@ -1,7 +1,8 @@
 import { logger } from '../../utils/logger.js';
-import * as pedidosSheets from '../sheets/pedidos.js';
-import * as estoqueService from '../sheets/estoque.js';
-import * as clientesService from '../sheets/clientes.js';
+import * as pedidosSheets from '../sqlite/pedidos.js';
+import * as estoqueService from '../sqlite/estoque.js';
+import * as clientesService from '../sqlite/clientes.js';
+import * as leadsService from '../sqlite/leads.js';
 import * as interpreterService from '../nlp/interpreter.js';
 import * as validatorService from '../nlp/validator.js';
 import { enviarMensagem } from '../whatsapp/sender.js';
@@ -125,6 +126,18 @@ async function processarMensagemPedido(mensagem, clienteWhatsApp) {
       }
 
       cliente = await clientesService.findByWhatsApp(pedidoInterpretado.cliente_whatsapp);
+
+      // Criar entrada em LEADS para novo cliente
+      const leadResult = await leadsService.criarLead(
+        pedidoInterpretado.cliente_nome,
+        pedidoInterpretado.cliente_whatsapp,
+        '',  // email não disponível via WhatsApp
+        'site_compra'  // fonte: primeira compra via WhatsApp
+      );
+
+      if (!leadResult.success) {
+        logger.warn(`[LEADS] Aviso ao criar lead para ${pedidoInterpretado.cliente_nome}: ${leadResult.error}`);
+      }
     }
 
     // PASSO 5: Reservar estoque para cada item
@@ -299,6 +312,32 @@ async function processarStatusUpdate(mensagem, clienteWhatsApp) {
       if (updateResult.success) {
         resultado.success = true;
         mensagem_usuario = `✓ Pagamento confirmado! Pedido #${interpretacao.numero_pedido} aguardando entrega.`;
+
+        // Atualizar lead: total gasto e status
+        try {
+          const leadUpdate = await leadsService.atualizarTotalGastoLead(
+            pedido.cliente_whatsapp,
+            pedido.valor_total,
+            interpretacao.numero_pedido
+          );
+
+          if (leadUpdate.success && leadUpdate.isVip) {
+            mensagem_usuario += '\n\n🎉 *Cliente VIP!* Você atingiu R$ 500+ em compras!';
+            logger.info(`[LEADS] Cliente ${pedido.cliente_whatsapp} promovido a VIP`);
+
+            // Notificar Felipe sobre novo VIP
+            enviarNotificacaoNovoVIP(pedido, interpretacao.numero_pedido).catch(e =>
+              logger.warn('[notif-vip] Erro ao notificar:', e.message)
+            );
+          } else if (leadUpdate.success && !leadUpdate.isVip && pedido.valor_total > 0) {
+            // Notificar Felipe sobre novo cliente que pagou
+            enviarNotificacaoNovoClientePagou(pedido, interpretacao.numero_pedido).catch(e =>
+              logger.warn('[notif-cliente] Erro ao notificar:', e.message)
+            );
+          }
+        } catch (e) {
+          logger.warn(`[LEADS] Erro ao atualizar total gasto do lead: ${e.message}`);
+        }
       } else {
         mensagem_usuario = `❌ Erro ao confirmar pagamento: ${updateResult.error}`;
       }
@@ -432,6 +471,66 @@ ${pedido.data_entrega ? `   Entregue em: ${new Date(pedido.data_entrega).toLocal
 
 Valor: R$ ${pedido.valor_total.toFixed(2)}
   `.trim();
+}
+
+/**
+ * Envia notificação para Felipe quando novo cliente faz primeira compra
+ */
+async function enviarNotificacaoNovoClientePagou(pedido, numeroPedido) {
+  const numeroFelipe = process.env.NUMERO_FELIPE;
+  if (!numeroFelipe) return;
+
+  const mensagem = `
+🎉 *NOVO CLIENTE PAGOU!*
+
+👤 ${pedido.cliente_nome}
+📱 ${pedido.cliente_whatsapp}
+
+📋 Pedido: #${numeroPedido}
+🛍️ Descrição: ${pedido.descricao_pedido || 'N/A'}
+💰 Valor: R$ ${(pedido.valor_total || 0).toFixed(2)}
+💳 Forma: ${pedido.forma_pagamento || 'N/A'}
+
+🚚 Tipo: ${pedido.tipo_entrega || 'N/A'}
+`.trim();
+
+  try {
+    await enviarMensagem(numeroFelipe, mensagem);
+    logger.info(`[notif-cliente] Notificação enviada para Felipe: ${numeroPedido}`);
+  } catch (error) {
+    logger.error('[notif-cliente] Erro ao enviar notificação:', error.message);
+  }
+}
+
+/**
+ * Envia notificação para Felipe quando cliente é promovido a VIP
+ */
+async function enviarNotificacaoNovoVIP(pedido, numeroPedido) {
+  const numeroFelipe = process.env.NUMERO_FELIPE;
+  if (!numeroFelipe) return;
+
+  const mensagem = `
+⭐ *NOVO CLIENTE VIP!*
+
+👤 ${pedido.cliente_nome}
+📱 ${pedido.cliente_whatsapp}
+
+🎯 Alcançou R$ 500+ em compras!
+
+📋 Pedido: #${numeroPedido}
+🛍️ Descrição: ${pedido.descricao_pedido || 'N/A'}
+💰 Valor: R$ ${(pedido.valor_total || 0).toFixed(2)}
+💳 Forma: ${pedido.forma_pagamento || 'N/A'}
+
+💡 Sugestão: Ofereça frete grátis ou desconto exclusivo!
+`.trim();
+
+  try {
+    await enviarMensagem(numeroFelipe, mensagem);
+    logger.info(`[notif-vip] Notificação enviada para Felipe: ${numeroPedido}`);
+  } catch (error) {
+    logger.error('[notif-vip] Erro ao enviar notificação:', error.message);
+  }
 }
 
 export {

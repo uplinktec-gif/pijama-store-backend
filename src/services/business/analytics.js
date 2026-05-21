@@ -1,65 +1,27 @@
 import { logger } from '../../utils/logger.js';
-import { getSheetsClient, getSpreadsheetId } from '../../config/sheets.js';
+import { query } from '../../config/database.js';
 
 /**
- * Helper: buscar todos os pedidos da sheet
- */
-async function buscarTodosPedidos() {
-  try {
-    const sheets = getSheetsClient();
-    if (!sheets) return [];
-
-    const spreadsheetId = getSpreadsheetId();
-    const response = await sheets.spreadsheets.values.get({
-      spreadsheetId,
-      range: 'PEDIDOS_E_VENDAS!A:P'
-    });
-
-    const rows = response.data.values || [];
-    if (rows.length <= 1) return [];
-
-    // Pular cabeçalho
-    const pedidos = [];
-    const headers = rows[0];
-    for (let i = 1; i < rows.length; i++) {
-      const row = rows[i];
-      if (!row[0]) continue; // Pular linhas vazias
-
-      const pedido = {};
-      headers.forEach((h, idx) => {
-        pedido[h] = row[idx] || '';
-      });
-      pedidos.push(pedido);
-    }
-    return pedidos;
-  } catch (error) {
-    logger.error('Erro ao buscar pedidos:', error.message);
-    return [];
-  }
-}
-
-/**
- * Análise de vendas dos últimos N dias
+ * Análise de vendas dos últimos N dias (usando SQLite)
  */
 async function analisarVendas(diasRetroceder = 7) {
   try {
     logger.info(`Analisando vendas dos últimos ${diasRetroceder} dias`);
 
-    // Buscar todos os pedidos
-    const todosPedidos = await buscarTodosPedidos();
-
-    // Filtrar pedidos pagos dos últimos N dias
     const dataLimite = new Date();
     dataLimite.setDate(dataLimite.getDate() - diasRetroceder);
+    const dataLimiteISO = dataLimite.toISOString();
 
-    const pedidosRecentes = todosPedidos.filter(p => {
-      if (!p.DATA_PAGAMENTO) return false;
-      const dataPedido = new Date(p.DATA_PAGAMENTO);
-      return dataPedido >= dataLimite && (p.STATUS_PAGAMENTO === 'PAGO' || p.STATUS_PAGAMENTO === 'pago');
-    });
+    // Buscar pedidos pagos no período
+    const pedidosRecentes = query(
+      `SELECT * FROM pedidos
+       WHERE status_pagamento = 'PAGO'
+         AND data_pagamento >= ?`,
+      [dataLimiteISO]
+    );
 
-    // Calcular métricas
-    const totalVendido = pedidosRecentes.reduce((sum, p) => sum + (parseFloat(p.VALOR_TOTAL) || 0), 0);
+    // Métricas gerais
+    const totalVendido = pedidosRecentes.reduce((sum, p) => sum + (parseFloat(p.valor_total) || 0), 0);
     const quantidadePedidos = pedidosRecentes.length;
     const ticketMedio = quantidadePedidos > 0 ? totalVendido / quantidadePedidos : 0;
 
@@ -67,20 +29,17 @@ async function analisarVendas(diasRetroceder = 7) {
     const porModelo = {};
     pedidosRecentes.forEach(p => {
       try {
-        const itens = JSON.parse(p.ITENS_JSON || '[]');
+        const itens = JSON.parse(p.itens_json || '[]');
         itens.forEach(item => {
           if (!porModelo[item.modelo]) {
             porModelo[item.modelo] = { quantidade: 0, valor: 0 };
           }
           porModelo[item.modelo].quantidade += item.quantidade || 1;
-          porModelo[item.modelo].valor += item.preco ? item.preco * (item.quantidade || 1) : 0;
+          porModelo[item.modelo].valor += (item.preco || 0) * (item.quantidade || 1);
         });
-      } catch (e) {
-        // Ignorar erros de parse
-      }
+      } catch (_) {}
     });
 
-    // Produtos mais vendidos (ordenado por quantidade)
     const maisVendidos = Object.entries(porModelo)
       .sort((a, b) => b[1].quantidade - a[1].quantidade)
       .slice(0, 5)
@@ -98,9 +57,10 @@ async function analisarVendas(diasRetroceder = 7) {
       vendasPorDia[d.toISOString().slice(0, 10)] = 0;
     }
     pedidosRecentes.forEach(p => {
-      const dia = new Date(p.DATA_PAGAMENTO).toISOString().slice(0, 10);
+      if (!p.data_pagamento) return;
+      const dia = p.data_pagamento.slice(0, 10);
       if (vendasPorDia[dia] !== undefined) {
-        vendasPorDia[dia] += parseFloat(p.VALOR_TOTAL) || 0;
+        vendasPorDia[dia] += parseFloat(p.valor_total) || 0;
       }
     });
 
@@ -110,7 +70,10 @@ async function analisarVendas(diasRetroceder = 7) {
       quantidadePedidos,
       ticketMedio: parseFloat(ticketMedio.toFixed(2)),
       maisVendidos,
-      vendasPorDia: Object.entries(vendasPorDia).map(([data, valor]) => ({ data, valor: parseFloat(valor.toFixed(2)) }))
+      vendasPorDia: Object.entries(vendasPorDia).map(([data, valor]) => ({
+        data,
+        valor: parseFloat(valor.toFixed(2))
+      }))
     };
   } catch (error) {
     logger.error('Erro ao analisar vendas:', error.message);
@@ -119,157 +82,60 @@ async function analisarVendas(diasRetroceder = 7) {
 }
 
 /**
- * Helper: buscar todo estoque
- */
-async function buscarTodoEstoque() {
-  try {
-    const sheets = getSheetsClient();
-    if (!sheets) return [];
-
-    const spreadsheetId = getSpreadsheetId();
-    const response = await sheets.spreadsheets.values.get({
-      spreadsheetId,
-      range: 'ESTOQUE!A:K'
-    });
-
-    const rows = response.data.values || [];
-    if (rows.length <= 1) return [];
-
-    const estoque = [];
-    const headers = rows[0];
-    for (let i = 1; i < rows.length; i++) {
-      const row = rows[i];
-      if (!row[0]) continue;
-
-      const produto = {};
-      headers.forEach((h, idx) => {
-        produto[h] = row[idx] || '';
-      });
-      estoque.push(produto);
-    }
-    return estoque;
-  } catch (error) {
-    logger.error('Erro ao buscar estoque:', error.message);
-    return [];
-  }
-}
-
-/**
- * Análise de estoque (dias até esgotar)
+ * Análise de estoque (alertas de baixo estoque)
  */
 async function analisarEstoque() {
   try {
     logger.info('Analisando níveis de estoque');
 
-    const todoProduto = await buscarTodoEstoque();
+    const todoProduto = query(
+      "SELECT * FROM estoque WHERE UPPER(status) = 'ATIVO' ORDER BY (quantidade_total - quantidade_reservada) ASC"
+    );
 
-    // Calcular velocidade de venda (últimos 7 dias)
+    // Velocidade de venda dos últimos 7 dias
     const analiseVendas = await analisarVendas(7);
-    const vendidosPorModelo = analiseVendas.maisVendidos;
-
-    // Mapear velocidade
     const velocidade = {};
-    vendidosPorModelo.forEach(v => {
-      velocidade[v.modelo] = v.quantidade / 7; // por dia
+    analiseVendas.maisVendidos.forEach(v => {
+      velocidade[v.modelo] = v.quantidade / 7;
     });
 
-    // Analisar estoque
     const alertas = [];
     const statusEstoque = [];
 
     todoProduto.forEach(produto => {
-      const status = (produto.STATUS || '').toLowerCase();
-      if (status !== 'ativo' && status !== 'active') return;
-
-      const disponivel = parseInt(produto.QUANTIDADE_DISPONIVEL) || 0;
-      const velocidadeDiaria = velocidade[produto.MODELO] || 0.5;
-
-      let diasRestantes = 999;
-      if (velocidadeDiaria > 0) {
-        diasRestantes = Math.floor(disponivel / velocidadeDiaria);
-      }
+      const disponivel = (parseInt(produto.quantidade_total) || 0) - (parseInt(produto.quantidade_reservada) || 0);
+      const velocidadeDiaria = velocidade[produto.modelo] || 0.5;
+      const diasRestantes = velocidadeDiaria > 0 ? Math.floor(disponivel / velocidadeDiaria) : 999;
 
       statusEstoque.push({
-        modelo: produto.MODELO || 'N/A',
-        cor: produto.COR || 'N/A',
-        tamanho: produto.TAMANHO || 'N/A',
+        modelo: produto.modelo,
+        cor: produto.cor,
+        tamanho: produto.tamanho,
         disponivel,
         diasRestantes: Math.max(0, diasRestantes),
         velocidadeDiaria: parseFloat(velocidadeDiaria.toFixed(2))
       });
 
-      // Alertas
-      if (diasRestantes <= 3) {
-        alertas.push({
-          tipo: 'URGENTE',
-          modelo: produto.MODELO,
-          tamanho: produto.TAMANHO || 'N/A',
-          cor: produto.COR || 'N/A',
-          produto: `${produto.MODELO} ${produto.TAMANHO} ${produto.COR}`,
-          disponivel,
-          diasRestantes
-        });
+      if (disponivel === 0) {
+        alertas.push({ tipo: 'SEM_ESTOQUE', produto: `${produto.modelo} ${produto.tamanho} ${produto.cor}`, disponivel, diasRestantes: 0 });
+      } else if (diasRestantes <= 3) {
+        alertas.push({ tipo: 'URGENTE', produto: `${produto.modelo} ${produto.tamanho} ${produto.cor}`, disponivel, diasRestantes });
       } else if (diasRestantes <= 7) {
-        alertas.push({
-          tipo: 'AVISO',
-          modelo: produto.MODELO,
-          tamanho: produto.TAMANHO || 'N/A',
-          cor: produto.COR || 'N/A',
-          produto: `${produto.MODELO} ${produto.TAMANHO} ${produto.COR}`,
-          disponivel,
-          diasRestantes
-        });
+        alertas.push({ tipo: 'AVISO', produto: `${produto.modelo} ${produto.tamanho} ${produto.cor}`, disponivel, diasRestantes });
       }
     });
 
-    // Ordenar por dias restantes
-    statusEstoque.sort((a, b) => a.diasRestantes - b.diasRestantes);
     alertas.sort((a, b) => a.diasRestantes - b.diasRestantes);
 
     return {
       statusEstoque: statusEstoque.slice(0, 10),
       alertas,
-      totalProdutos: statusEstoque.length
+      totalProdutos: statusEstoque.length,
+      zerados: statusEstoque.filter(s => s.disponivel === 0).length
     };
   } catch (error) {
     logger.error('Erro ao analisar estoque:', error.message);
     throw error;
-  }
-}
-
-/**
- * Helper: buscar todos os clientes da sheet
- */
-async function buscarTodosClientes() {
-  try {
-    const sheets = getSheetsClient();
-    if (!sheets) return [];
-
-    const spreadsheetId = getSpreadsheetId();
-    const response = await sheets.spreadsheets.values.get({
-      spreadsheetId,
-      range: 'CLIENTES!A:N'
-    });
-
-    const rows = response.data.values || [];
-    if (rows.length <= 1) return [];
-
-    const clientes = [];
-    const headers = rows[0];
-    for (let i = 1; i < rows.length; i++) {
-      const row = rows[i];
-      if (!row[0]) continue;
-
-      const cliente = {};
-      headers.forEach((h, idx) => {
-        cliente[h] = row[idx] || '';
-      });
-      clientes.push(cliente);
-    }
-    return clientes;
-  } catch (error) {
-    logger.error('Erro ao buscar clientes:', error.message);
-    return [];
   }
 }
 
@@ -280,38 +146,31 @@ async function analisarClientes() {
   try {
     logger.info('Analisando base de clientes');
 
-    const todosClientes = await buscarTodosClientes();
+    const todosClientes = query('SELECT * FROM clientes ORDER BY total_gasto DESC');
 
-    // Calcular VIPs (maiores gastos)
     const vips = todosClientes
-      .filter(c => c.TOTAL_GASTO && parseFloat(c.TOTAL_GASTO) > 0)
-      .sort((a, b) => parseFloat(b.TOTAL_GASTO) - parseFloat(a.TOTAL_GASTO))
+      .filter(c => parseFloat(c.total_gasto) > 0)
       .slice(0, 5)
       .map(c => ({
-        nome: c.NOME,
-        whatsapp: c.WHATSAPP,
-        totalGasto: parseFloat(c.TOTAL_GASTO),
-        quantidadePedidos: parseInt(c.QUANTIDADE_PEDIDOS) || 0,
-        modeloFavorito: c.MODELO_FAVORITO || 'N/A'
+        nome: c.nome,
+        whatsapp: c.whatsapp,
+        totalGasto: parseFloat(c.total_gasto),
+        quantidadePedidos: parseInt(c.quantidade_pedidos) || 0,
+        modeloFavorito: c.modelo_favorito || 'N/A'
       }));
 
-    // Clientes inativos (>30 dias sem compra)
     const dataLimite = new Date();
     dataLimite.setDate(dataLimite.getDate() - 30);
 
     const inativos = todosClientes
-      .filter(c => {
-        if (!c.DATA_ULTIMO_PEDIDO) return true; // Nunca comprou
-        const dataUltimo = new Date(c.DATA_ULTIMO_PEDIDO);
-        return dataUltimo < dataLimite;
-      })
+      .filter(c => !c.data_ultimo_pedido || new Date(c.data_ultimo_pedido) < dataLimite)
       .map(c => ({
-        nome: c.NOME,
-        whatsapp: c.WHATSAPP,
-        diasSemCompra: c.DATA_ULTIMO_PEDIDO ?
-          Math.floor((new Date() - new Date(c.DATA_ULTIMO_PEDIDO)) / (1000 * 60 * 60 * 24)) :
-          999,
-        quantidadePedidos: parseInt(c.QUANTIDADE_PEDIDOS) || 0
+        nome: c.nome,
+        whatsapp: c.whatsapp,
+        diasSemCompra: c.data_ultimo_pedido
+          ? Math.floor((Date.now() - new Date(c.data_ultimo_pedido)) / 86400000)
+          : 999,
+        quantidadePedidos: parseInt(c.quantidade_pedidos) || 0
       }))
       .sort((a, b) => b.diasSemCompra - a.diasSemCompra)
       .slice(0, 10);
@@ -333,17 +192,14 @@ async function analisarClientes() {
 async function gerarRelatorioDiario() {
   try {
     logger.info('Gerando relatório diário completo');
-
-    const vendas = await analisarVendas(1); // Apenas hoje
+    const vendas = await analisarVendas(1);
     const estoque = await analisarEstoque();
     const clientes = await analisarClientes();
 
     return {
       data: new Date().toLocaleDateString('pt-BR'),
       hora: new Date().toLocaleTimeString('pt-BR'),
-      vendas,
-      estoque,
-      clientes
+      vendas, estoque, clientes
     };
   } catch (error) {
     logger.error('Erro ao gerar relatório diário:', error.message);
@@ -351,9 +207,4 @@ async function gerarRelatorioDiario() {
   }
 }
 
-export {
-  analisarVendas,
-  analisarEstoque,
-  analisarClientes,
-  gerarRelatorioDiario
-};
+export { analisarVendas, analisarEstoque, analisarClientes, gerarRelatorioDiario };

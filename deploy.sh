@@ -9,8 +9,8 @@ VPS_IP="177.7.47.211"
 VPS_USER="root"
 VPS_DIR="/opt/pijama-store"
 SSH_KEY="$HOME/.ssh/id_rsa"
-# NODE e LOG são resolvidos NA VPS (não expande localmente)
 VPS_NODE='/root/.nvm/versions/node/v24.15.0/bin/node'
+VPS_NPM='/root/.nvm/versions/node/v24.15.0/bin/npm'
 
 GREEN='\033[0;32m'
 RED='\033[0;31m'
@@ -27,11 +27,17 @@ echo "========================================"
 
 # 1. Verifica conexão SSH
 info "Verificando conexão com a VPS..."
-ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no -o ConnectTimeout=5 "$VPS_USER@$VPS_IP" "echo ok" > /dev/null 2>&1 \
+ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no -o ConnectTimeout=8 "$VPS_USER@$VPS_IP" "echo ok" > /dev/null 2>&1 \
   || err "Não conseguiu conectar na VPS. Verifique a chave SSH e o IP."
 ok "Conexão OK"
 
-# 2. Envia src/ completo
+# 2. Cria diretórios necessários na VPS
+info "Criando diretórios..."
+ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$VPS_USER@$VPS_IP" \
+  "mkdir -p $VPS_DIR/data/backups $VPS_DIR/logs $VPS_DIR/public/admin" > /dev/null 2>&1
+ok "Diretórios criados"
+
+# 3. Envia src/ completo
 info "Enviando src/..."
 scp -r -i "$SSH_KEY" -o StrictHostKeyChecking=no \
   src \
@@ -39,54 +45,99 @@ scp -r -i "$SSH_KEY" -o StrictHostKeyChecking=no \
   || err "Falha ao enviar src/"
 ok "src/ enviado"
 
-# 3. Envia server.js
-info "Enviando server.js..."
-scp -i "$SSH_KEY" -o StrictHostKeyChecking=no \
-  server.js \
-  "$VPS_USER@$VPS_IP:$VPS_DIR/server.js" > /dev/null 2>&1 \
-  || err "Falha ao enviar server.js"
-ok "server.js enviado"
+# 4. Envia public/ (loja + portal + admin)
+info "Enviando public/..."
+scp -r -i "$SSH_KEY" -o StrictHostKeyChecking=no \
+  public \
+  "$VPS_USER@$VPS_IP:$VPS_DIR/" > /dev/null 2>&1 \
+  || err "Falha ao enviar public/"
+ok "public/ enviado (inclui painel admin)"
 
-# 4. Envia .env (se existir localmente)
+# 5. Envia scripts/ (migração)
+info "Enviando scripts/..."
+scp -r -i "$SSH_KEY" -o StrictHostKeyChecking=no \
+  scripts \
+  "$VPS_USER@$VPS_IP:$VPS_DIR/" > /dev/null 2>&1 \
+  || err "Falha ao enviar scripts/"
+ok "scripts/ enviado"
+
+# 6. Envia server.js e package.json
+info "Enviando server.js e package.json..."
+scp -i "$SSH_KEY" -o StrictHostKeyChecking=no \
+  server.js package.json \
+  "$VPS_USER@$VPS_IP:$VPS_DIR/" > /dev/null 2>&1 \
+  || err "Falha ao enviar server.js/package.json"
+ok "server.js e package.json enviados"
+
+# 7. Envia .env
 if [ -f ".env" ]; then
   info "Enviando .env..."
   scp -i "$SSH_KEY" -o StrictHostKeyChecking=no \
     .env \
     "$VPS_USER@$VPS_IP:$VPS_DIR/.env" > /dev/null 2>&1 \
-    && ok ".env enviado" || echo "  (aviso: falha ao enviar .env, ignorado)"
+    && ok ".env enviado" || echo "  (aviso: falha ao enviar .env, usando o existente)"
 fi
 
-# 5. Reinicia o servidor na VPS
-info "Reiniciando servidor na VPS..."
-ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$VPS_USER@$VPS_IP" '
-  # Mata qualquer processo usando a porta 3000
-  fuser -k 3000/tcp 2>/dev/null
-  pkill -f "node /opt/pijama-store/server.js" 2>/dev/null
-  sleep 3
-  # Inicia novo servidor
-  LOG="/opt/pijama-store/logs/combined-$(date +%Y-%m-%d).log"
-  cd /opt/pijama-store
-  nohup /root/.nvm/versions/node/v24.15.0/bin/node server.js >> "$LOG" 2>&1 &
-  echo $! > /tmp/pijama-store.pid
-' > /dev/null 2>&1
-sleep 6
+# 8. Instala dependências na VPS (sql.js é novo)
+info "Instalando dependências na VPS (pode levar ~30s)..."
+ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$VPS_USER@$VPS_IP" \
+  "cd $VPS_DIR && $VPS_NPM install --omit=dev --silent 2>&1 | tail -3" \
+  || err "Falha no npm install"
+ok "Dependências instaladas"
 
-# 6. Confirma que está rodando
+# 9. Executar migração na VPS (se banco não existir)
+info "Verificando banco de dados..."
+ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$VPS_USER@$VPS_IP" \
+  "cd $VPS_DIR && if [ ! -f data/pijama-store.db ]; then
+    echo 'Banco não encontrado, executando migração...'
+    $VPS_NODE scripts/migrate-sheets-to-sqlite.js 2>&1 | tail -15
+  else
+    SIZE=\$(du -sh data/pijama-store.db | cut -f1)
+    echo \"Banco já existe (\$SIZE), pulando migração\"
+  fi"
+ok "Banco de dados verificado"
+
+# 10. Mata processo anterior e reinicia
+info "Reiniciando servidor na VPS..."
+ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$VPS_USER@$VPS_IP" \
+  "fuser -k 3000/tcp 2>/dev/null; pkill -f 'node.*server.js' 2>/dev/null; sleep 3
+   LOG=\"$VPS_DIR/logs/combined-\$(date +%Y-%m-%d).log\"
+   cd $VPS_DIR
+   nohup $VPS_NODE server.js >> \"\$LOG\" 2>&1 &
+   echo \$! > /tmp/pijama-store.pid
+   echo \"PID: \$(cat /tmp/pijama-store.pid)\"" 2>/dev/null
+sleep 8
+
+# 11. Health check
 info "Verificando servidor..."
-STATUS=$(curl -s --max-time 5 "http://$VPS_IP:3000/health" 2>/dev/null)
+STATUS=$(curl -s --max-time 8 "http://$VPS_IP:3000/health" 2>/dev/null)
 if echo "$STATUS" | grep -q '"status":"ok"'; then
   ok "Servidor rodando em http://$VPS_IP:3000"
 else
-  err "Servidor não respondeu ao health check. Verifique os logs na VPS."
+  echo "  Health check: $STATUS"
+  err "Servidor não respondeu. Verifique os logs."
 fi
 
-# 7. Mostra últimas linhas do log
+# 12. Testar painel admin
+info "Verificando painel admin..."
+ADMIN_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 "http://$VPS_IP:3000/admin/" 2>/dev/null)
+if [ "$ADMIN_STATUS" = "200" ]; then
+  ok "Painel admin acessível: http://$VPS_IP:3000/admin"
+else
+  echo "  (Admin retornou HTTP $ADMIN_STATUS)"
+fi
+
+# 13. Log final
 echo ""
 echo "📋  Últimas linhas do log:"
 ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$VPS_USER@$VPS_IP" \
-  'tail -8 /opt/pijama-store/logs/combined-$(date +%Y-%m-%d).log 2>/dev/null' 2>/dev/null
+  "tail -10 $VPS_DIR/logs/combined-\$(date +%Y-%m-%d).log 2>/dev/null" 2>/dev/null
 
 echo ""
 echo "========================================"
 ok "Deploy concluído!"
+echo ""
+echo "  🌐 Site:   http://$VPS_IP:3000"
+echo "  🔧 Admin:  http://$VPS_IP:3000/admin"
+echo "  👤 Portal: http://$VPS_IP:3000/portal"
 echo ""

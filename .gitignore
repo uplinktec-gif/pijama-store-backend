@@ -44,3 +44,24 @@ Thumbs.db
 # Backups
 *.backup
 backup/
+
+# Banco de dados SQLite (arquivo local, não vai pro git)
+data/*.db
+data/*.db-wal
+data/*.db-shm
+data/backups/
+
+# Claude AI session files
+.claude/
+
+# Docs temporários de desenvolvimento
+AUTENTICACAO_PHASE2.md
+AUTHENTICATION_PHASE1.md
+AUTENTICACAO_PHASE2.md
+COMO_TESTAR.md
+IMPLEMENTATION_PHASE2B.md
+PROXIMO_PASSO.md
+QUICK_TEST_PHASE2B.md
+STATUS_AUTENTICACAO.md
+STATUS_BUGS_FIXED.md
+TESTING_PHASE2B.md

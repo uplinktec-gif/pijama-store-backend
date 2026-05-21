@@ -1,5 +1,5 @@
 import { logger } from '../../utils/logger.js';
-import * as estoqueSheets from '../sheets/estoque.js';
+import * as estoqueSheets from '../sqlite/estoque.js';
 
 /**
  * Retorna todo o estoque com formatação para análise

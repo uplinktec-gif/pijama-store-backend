@@ -1,19 +1,28 @@
 import app from './src/app.js';
 import { logger } from './src/utils/logger.js';
 import { inicializarScheduler, cancelarTodosJobs } from './src/services/scheduler/jobs.js';
+import { initializeDatabase, closeDatabase, saveDatabase } from './src/config/database.js';
 import { initializeSheets } from './src/config/sheets.js';
 import { initializeClaude } from './src/config/claude.js';
 import { initializeGemini } from './src/config/gemini.js';
 import { inicializarSecretSessao } from './src/utils/sessionTokens.js';
-import { inicializarSheetSuporte } from './src/services/sheets/suporte.js';
 
-const PORT = process.env.PORT || 3000;
+const PORT = parseInt(process.env.PORT, 10) || 5000;
 
 async function iniciar() {
-  // Inicializar Google Sheets e Claude API antes de aceitar requisições
-  await initializeSheets();
+  // Inicializar banco de dados SQLite
+  await initializeDatabase();
+
+  // Inicializar Claude API
   initializeClaude();
   await initializeGemini();
+
+  // Inicializar Google Sheets (opcional - usado apenas para Google OAuth)
+  try {
+    await initializeSheets();
+  } catch (err) {
+    logger.warn('⚠️ Google Sheets não inicializado (opcional):', err.message);
+  }
 
   // Inicializar secret de sessão do cliente (Portal)
   const clienteSessionSecret = process.env.CLIENTE_SESSION_SECRET;
@@ -22,9 +31,6 @@ async function iniciar() {
   } else {
     inicializarSecretSessao(clienteSessionSecret);
   }
-
-  // Inicializar sheet SUPORTE para "Fale Conosco"
-  await inicializarSheetSuporte();
 
   let server;
   let actualPort = PORT;
@@ -55,6 +61,8 @@ async function iniciar() {
   process.on('SIGTERM', () => {
     logger.info('SIGTERM recebido. Encerrando servidor...');
     cancelarTodosJobs();
+    saveDatabase(true);
+    closeDatabase();
     server.close(() => {
       logger.info('Servidor encerrado');
       process.exit(0);
@@ -64,6 +72,8 @@ async function iniciar() {
   process.on('SIGINT', () => {
     logger.info('SIGINT recebido. Encerrando servidor...');
     cancelarTodosJobs();
+    saveDatabase(true);
+    closeDatabase();
     server.close(() => {
       logger.info('Servidor encerrado');
       process.exit(0);
