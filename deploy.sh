@@ -97,42 +97,32 @@ ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$VPS_USER@$VPS_IP" \
   fi"
 ok "Banco de dados verificado"
 
-# 10. Mata TODOS os processos antigos e reinicia com nvm
-info "Reiniciando servidor na VPS..."
+# 10. Reinicia via PM2 (garante 1 processo único — sem acúmulo)
+info "Reiniciando servidor na VPS via PM2..."
 ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$VPS_USER@$VPS_IP" \
   'export NVM_DIR="$HOME/.nvm" && [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
-
-   # 1. Matar pelo PID salvo (mais confiável)
-   if [ -f /tmp/pijama-store.pid ]; then
-     OLD_PID=$(cat /tmp/pijama-store.pid)
-     kill -9 "$OLD_PID" 2>/dev/null && echo "Processo $OLD_PID morto via PID"
-     rm -f /tmp/pijama-store.pid
-   fi
-
-   # 2. Matar qualquer instância acumulada (processo fica como "node /opt/pijama-store/server.js")
-   pkill -9 -f "pijama-store/server.js" 2>/dev/null
-   pkill -9 -f "pijama-store" 2>/dev/null
-
-   # 3. Liberar portas 3000-3005 (processos zumbis em porta alternativa)
-   for port in 3000 3001 3002 3003 3004 3005; do
-     fuser -k "${port}/tcp" 2>/dev/null
-   done
-
-   sleep 3
-
-   # 4. Confirmar que nenhum processo sobrou
-   RESTANTES=$(pgrep -f "node server.js" | wc -l)
-   if [ "$RESTANTES" -gt 0 ]; then
-     echo "AVISO: ainda há $RESTANTES processo(s) node rodando após kill"
-     pgrep -f "node server.js" | xargs kill -9 2>/dev/null
-     sleep 1
-   fi
-
-   LOG="'"$VPS_DIR"'/logs/combined-$(date +%Y-%m-%d).log"
    cd '"$VPS_DIR"'
-   nohup node server.js >> "$LOG" 2>&1 &
-   echo $! > /tmp/pijama-store.pid
-   echo "PID: $(cat /tmp/pijama-store.pid)"' 2>/dev/null
+
+   # Garantir PM2 disponível
+   PM2="$(npm root -g 2>/dev/null)/pm2/bin/pm2"
+   [ ! -f "$PM2" ] && PM2="pm2"
+
+   # Parar e remover instância antiga (se existir)
+   $PM2 delete pijama-store 2>/dev/null || true
+
+   # Matar qualquer processo node zumbi restante (segurança extra)
+   pkill -9 -f "pijama-store/server.js" 2>/dev/null || true
+   for port in 3000 3001 3002 3003 3004 3005; do
+     fuser -k "${port}/tcp" 2>/dev/null || true
+   done
+   sleep 2
+
+   # Subir com PM2 (instances:1 no ecosystem.config.cjs garante processo único)
+   $PM2 start ecosystem.config.cjs --env production
+   $PM2 save
+
+   echo "Processos node rodando:"
+   pgrep -c -f "pijama-store" 2>/dev/null || echo "0"' 2>/dev/null
 sleep 8
 
 # 11. Health check

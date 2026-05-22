@@ -2,19 +2,17 @@ module.exports = {
   apps: [{
     name: 'pijama-store',
     script: 'server.js',
-    cwd: 'C:\\Users\\Felipe\\pijama-store-backend',
+    cwd: '/opt/pijama-store',
     instances: 1,
     exec_mode: 'fork',
-    autorestart: true,
-    watch: false,
-    max_memory_restart: '500M',
-    env: {
-      NODE_ENV: 'production',
-      PORT: 3000
-    },
+    env: { NODE_ENV: 'production', PORT: 3000 },
+    restart_delay: 3000,
+    max_restarts: 10,
+    min_uptime: '5s',
+    out_file: '/opt/pijama-store/logs/pm2-out.log',
+    error_file: '/opt/pijama-store/logs/pm2-err.log',
+    merge_logs: true,
     log_date_format: 'YYYY-MM-DD HH:mm:ss',
-    error_file: './logs/pm2-error.log',
-    out_file: './logs/pm2-out.log',
-    merge_logs: true
+    watch: false
   }]
 };
