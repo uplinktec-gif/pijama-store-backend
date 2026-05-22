@@ -11,6 +11,7 @@ VPS_DIR="/opt/pijama-store"
 SSH_KEY="$HOME/.ssh/id_rsa"
 VPS_NODE='/root/.nvm/versions/node/v24.15.0/bin/node'
 VPS_NPM='/root/.nvm/versions/node/v24.15.0/bin/npm'
+VPS_NODE_DIR='/root/.nvm/versions/node/v24.15.0/bin'
 
 GREEN='\033[0;32m'
 RED='\033[0;31m'
@@ -98,31 +99,28 @@ ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$VPS_USER@$VPS_IP" \
 ok "Banco de dados verificado"
 
 # 10. Reinicia via PM2 (garante 1 processo único — sem acúmulo)
+VPS_PM2="$VPS_NODE_DIR/pm2"
 info "Reiniciando servidor na VPS via PM2..."
 ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$VPS_USER@$VPS_IP" \
-  'export NVM_DIR="$HOME/.nvm" && [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
-   cd '"$VPS_DIR"'
-
-   # Garantir PM2 disponível
-   PM2="$(npm root -g 2>/dev/null)/pm2/bin/pm2"
-   [ ! -f "$PM2" ] && PM2="pm2"
+  "export NVM_DIR=\"\$HOME/.nvm\" && [ -s \"\$NVM_DIR/nvm.sh\" ] && . \"\$NVM_DIR/nvm.sh\"
+   PM2=\"$VPS_PM2\"
+   cd $VPS_DIR
 
    # Parar e remover instância antiga (se existir)
-   $PM2 delete pijama-store 2>/dev/null || true
+   \$PM2 delete pijama-store 2>/dev/null || true
 
-   # Matar qualquer processo node zumbi restante (segurança extra)
-   pkill -9 -f "pijama-store/server.js" 2>/dev/null || true
+   # Matar qualquer processo zumbi restante (segurança extra)
+   pkill -9 -f \"pijama-store/server.js\" 2>/dev/null || true
    for port in 3000 3001 3002 3003 3004 3005; do
-     fuser -k "${port}/tcp" 2>/dev/null || true
+     fuser -k \"\${port}/tcp\" 2>/dev/null || true
    done
    sleep 2
 
    # Subir com PM2 (instances:1 no ecosystem.config.cjs garante processo único)
-   $PM2 start ecosystem.config.cjs --env production
-   $PM2 save
+   \$PM2 start ecosystem.config.cjs
+   \$PM2 save
 
-   echo "Processos node rodando:"
-   pgrep -c -f "pijama-store" 2>/dev/null || echo "0"' 2>/dev/null
+   echo \"Processos node rodando: \$(pgrep -c -f pijama-store 2>/dev/null || echo 0)\"" 2>/dev/null
 sleep 8
 
 # 11. Health check
