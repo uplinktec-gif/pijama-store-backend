@@ -348,6 +348,11 @@ const FAST_PATH_RULES = [
   { regex: /^@estoque$/i, action: '@estoque' },
   { regex: /^@(an[aá]lise|analysis|vendas|relat[oó]rio?)$/i, action: '@analise' },
   { regex: /^@atualizar\s+/i, action: '@atualizar' },
+  // ⭐ RESUMO COMPLETO DO ESTOQUE — "faça um resumo", "manda o estoque", "ver estoque"
+  {
+    regex: /(?:fa[çc]a?\s+(?:um\s+)?resumo|manda?\s+(?:o\s+)?estoque|ver\s+estoque|lista\s+(?:o\s+)?estoque|me\s+(?:manda|passa|d[aá])\s+(?:o\s+)?estoque|estoque\s+(?:atual|completo|todo))/i,
+    action: 'resumo_estoque_completo'
+  },
   // ⭐ CONSULTAR ESTOQUE — "tem X", "temos Y", "existe Z" (NOVO: consulta banco real)
   {
     regex: /(?:t[eê]m|temos|existe|há)\s+(?:algum|alguma|[oa]s?)?\s*(?:pijama|peça|roupa)?\s*(.+)/i,
@@ -457,6 +462,22 @@ async function processarMensagemComContexto(mensagem, clienteWhatsApp) {
         const resposta = gerarSaudacao(clienteWhatsApp);
         logger.info(`[FastPath] Saudação em ${Date.now() - inicio}ms`);
         return { success: true, resposta, tipo: 'SAUDACAO' };
+      }
+
+      // ⭐ Resumo completo do estoque (NOVO: consulta banco real)
+      if (fp.action === 'resumo_estoque_completo') {
+        try {
+          const lista = await sheetsEstoque.readAllEstoque();
+          const listaPlana = gerarListaPlanaEstoque(lista);
+          const resposta = listaPlana
+            ? `📦 *ESTOQUE ATUAL:*\n\n${listaPlana}`
+            : 'Nenhum item em estoque no momento.';
+          logger.info(`[FastPath] Resumo estoque completo em ${Date.now() - inicio}ms`);
+          return { success: true, resposta, tipo: 'RESUMO_ESTOQUE' };
+        } catch (err) {
+          logger.error('[FastPath] Erro ao gerar resumo estoque:', err.message);
+          return { success: false, resposta: 'Erro ao consultar estoque. Tenta de novo?', tipo: 'RESUMO_ESTOQUE' };
+        }
       }
 
       // ⭐ Consultar estoque (NOVO: consulta banco real, sem alucinação)

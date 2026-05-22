@@ -369,13 +369,24 @@ footer strong { color: white; }
 
         <div class="checkout-summary" id="checkout-summary"></div>
 
-        <div class="form-group">
-          <label>Nome completo *</label>
-          <input type="text" id="f-nome" placeholder="Seu nome" required>
+        <!-- Card de usuário logado (aparece quando logado) -->
+        <div id="checkout-user-card" style="display:none;background:#f8f8f8;border-radius:10px;padding:12px 16px;margin-bottom:20px;font-size:14px;display:flex;align-items:center;gap:10px">
+          <span style="font-size:20px">👤</span>
+          <div>
+            <strong id="checkout-user-nome"></strong>
+            <span style="color:#888;margin-left:8px" id="checkout-user-whats"></span>
+          </div>
         </div>
-        <div class="form-group">
-          <label>WhatsApp</label>
-          <input type="tel" id="f-whats" placeholder="(95) 99999-9999">
+        <!-- Campos (escondidos quando logado) -->
+        <div id="checkout-guest-fields">
+          <div class="form-group">
+            <label>Nome completo *</label>
+            <input type="text" id="f-nome" placeholder="Seu nome">
+          </div>
+          <div class="form-group">
+            <label>WhatsApp</label>
+            <input type="tel" id="f-whats" placeholder="(95) 99999-9999">
+          </div>
         </div>
         <div class="form-group">
           <label>Selecione o tipo de entrega *</label>
@@ -1070,6 +1081,31 @@ function openCheckout() {
 function abrirCheckoutLogado() {
   toggleCart();
   renderCheckoutSummary();
+
+  // Se já logado, mostrar card com dados do usuário e esconder campos
+  const info = window.authModal?.clienteInfo ||
+    (() => { try { return JSON.parse(sessionStorage.getItem('clienteInfo') || 'null'); } catch(e) { return null; } })();
+
+  const userCard = document.getElementById('checkout-user-card');
+  const guestFields = document.getElementById('checkout-guest-fields');
+
+  if (info?.nome) {
+    // Preencher card
+    document.getElementById('checkout-user-nome').textContent = info.nome;
+    document.getElementById('checkout-user-whats').textContent = info.whatsapp || '';
+    if (userCard) userCard.style.display = 'flex';
+    if (guestFields) guestFields.style.display = 'none';
+    // Preencher campos hidden também (usados no submit)
+    document.getElementById('f-nome').value = info.nome;
+    document.getElementById('f-whats').value = info.whatsapp || '';
+  } else {
+    if (userCard) userCard.style.display = 'none';
+    if (guestFields) guestFields.style.display = 'block';
+    // Tentar pré-preencher via API
+    const token = sessionStorage.getItem('authToken');
+    if (token) preencherCheckoutComDadosCliente(token);
+  }
+
   document.getElementById('checkout-form-step').style.display = 'block';
   document.getElementById('pix-screen').classList.remove('show');
   document.getElementById('checkout-modal').classList.add('open');
@@ -1162,7 +1198,8 @@ async function submitCheckout() {
   const whats = document.getElementById('f-whats').value.trim();
   const endereco = document.getElementById('f-endereco').value.trim();
 
-  if (!nome) { showToast('Informe seu nome', 'error'); return; }
+  const isLogado = document.getElementById('checkout-user-card')?.style.display === 'flex';
+  if (!nome && !isLogado) { showToast('Informe seu nome', 'error'); return; }
   if (!tipoEntrega) { showToast('Selecione o tipo de entrega', 'error'); return; }
   if (tipoEntrega === 'ENTREGA' && !endereco) { showToast('Informe o endereço de entrega', 'error'); return; }
 
