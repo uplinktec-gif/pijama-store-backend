@@ -109,8 +109,8 @@ ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$VPS_USER@$VPS_IP" \
      rm -f /tmp/pijama-store.pid
    fi
 
-   # 2. Matar qualquer "node server.js" ainda rodando (acumulados de deploys anteriores)
-   pkill -9 -f "node server.js" 2>/dev/null
+   # 2. Matar qualquer instância acumulada (processo fica como "node /opt/pijama-store/server.js")
+   pkill -9 -f "pijama-store/server.js" 2>/dev/null
    pkill -9 -f "pijama-store" 2>/dev/null
 
    # 3. Liberar portas 3000-3005 (processos zumbis em porta alternativa)
