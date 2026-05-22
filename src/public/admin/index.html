@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
@@ -852,6 +852,19 @@ tr.row-baixo { background: rgba(210,153,34,0.06); }
           </svg>
           <span class="nav-label">Clientes</span>
         </div>
+
+        <div class="nav-item" onclick="navTo('leads')">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          <span class="nav-label">Leads</span>
+        </div>
+        <div class="nav-item" onclick="navTo('suporte')">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          <span class="nav-label">Suporte</span>
+        </div>
+        <div class="nav-item" onclick="navTo('config')">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          <span class="nav-label">Config</span>
+        </div>
       </div>
 
       <div class="sidebar-footer">
@@ -1015,6 +1028,13 @@ tr.row-baixo { background: rgba(210,153,34,0.06); }
         </div>
       </section>
 
+
+      <!-- LEADS -->
+      <section class="page" id="page-leads"><div class="page-header"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg><h1 class="page-title">Leads</h1></div><div class="filters"><select id="filter-lead-status"><option value="">Todos</option><option value="novo">Novos</option><option value="cliente">Clientes</option><option value="vip">VIPs</option><option value="inativo">Inativos</option></select><button class="btn-primary" onclick="loadLeads()">Buscar</button></div><div class="error-msg" id="leads-error"></div><div id="leads-loading" class="loading" style="display:none"><div class="spinner"></div>Carregando...</div><div class="table-container"><div class="table-wrap"><table><thead><tr><th>Nome</th><th>Celular</th><th>Fonte</th><th>Status</th><th>Total Gasto</th><th>Criado em</th><th>Acao</th></tr></thead><tbody id="leads-body"></tbody></table></div></div></section>
+      <!-- SUPORTE -->
+      <section class="page" id="page-suporte"><div class="page-header"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><h1 class="page-title">Suporte</h1></div><div class="filters"><select id="filter-suporte-status" onchange="loadSuporte()"><option value="ABERTO">Abertos</option><option value="RESPONDIDO">Respondidos</option><option value="">Todos</option></select></div><div class="error-msg" id="suporte-error"></div><div id="suporte-loading" class="loading" style="display:none"><div class="spinner"></div>Carregando...</div><div class="table-container"><div class="table-wrap"><table><thead><tr><th>#</th><th>Cliente</th><th>Mensagem</th><th>Resposta</th><th>Status</th><th>Data</th><th>Acao</th></tr></thead><tbody id="suporte-body"></tbody></table></div></div></section>
+      <!-- CONFIG -->
+      <section class="page" id="page-config"><div class="page-header"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/></svg><h1 class="page-title">Configuracoes</h1></div><div style="display:grid;gap:20px;max-width:720px"><div class="table-container"><div style="padding:16px 20px;border-bottom:1px solid var(--border)"><div class="section-title" style="margin:0">Usuarios Autorizados (Bot)</div><div style="font-size:12px;color:var(--text-2);margin-top:4px">Via .env: NUMERO_FELIPE, NUMERO_JULLY</div></div><div style="padding:16px 20px" id="config-users"><div style="color:var(--text-2)">Carregando...</div></div></div><div class="table-container"><div style="padding:16px 20px;border-bottom:1px solid var(--border)"><div class="section-title" style="margin:0">Sistema</div></div><div style="padding:16px 20px;display:flex;flex-direction:column;gap:14px"><div style="display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:13px;font-weight:500">Servidor VPS</div><div style="font-size:12px;color:var(--text-2)">177.7.47.211:3000 (PM2)</div></div><span style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;background:rgba(63,185,80,.15);color:var(--success)">Online</span></div><div style="display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:13px;font-weight:500">Banco de Dados</div><div style="font-size:12px;color:var(--text-2)">pijama-store.db (SQLite)</div></div><span style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:600;background:rgba(63,185,80,.15);color:var(--success)">Ativo</span></div><div style="display:flex;justify-content:space-between"><div style="font-size:13px;font-weight:500">Chave PIX</div><div style="font-size:13px;color:var(--text-2)">plumabv@gmail.com</div></div><div style="display:flex;justify-content:space-between"><div style="font-size:13px;font-weight:500">Taxa de Entrega</div><div style="font-size:13px;color:var(--text-2)">R$ 10,00</div></div></div></div><div class="table-container"><div style="padding:16px 20px;border-bottom:1px solid var(--border)"><div class="section-title" style="margin:0">Tarefas Agendadas</div></div><div style="padding:16px 20px;display:flex;flex-direction:column;gap:10px"><div style="display:flex;justify-content:space-between;font-size:13px"><span>Relatorio Diario (Felipe)</span><span style="color:var(--text-2)">18h Boa Vista</span></div><div style="display:flex;justify-content:space-between;font-size:13px"><span>Alertas de Estoque</span><span style="color:var(--text-2)">10h</span></div><div style="display:flex;justify-content:space-between;font-size:13px"><span>Resumo Jully</span><span style="color:var(--text-2)">20h</span></div><div style="display:flex;justify-content:space-between;font-size:13px"><span>Recomendacoes VIPs</span><span style="color:var(--text-2)">Seg 09h</span></div><div style="display:flex;justify-content:space-between;font-size:13px"><span>Relatorio Semanal</span><span style="color:var(--text-2)">Dom 20h</span></div><div style="display:flex;justify-content:space-between;font-size:13px"><span>Backup Automatico</span><span style="color:var(--text-2)">02h</span></div></div></div></div></section>
     </main>
   </div>
 </div>
@@ -1048,6 +1068,19 @@ tr.row-baixo { background: rgba(210,153,34,0.06); }
     <div class="modal-btns">
       <button class="btn-cancel" onclick="closeModal('modal-entrega')">Cancelar</button>
       <button class="btn-confirm" onclick="confirmEntrega()">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL RESPONDER SUPORTE -->
+<div class="modal-bg" id="modal-suporte">
+  <div class="modal">
+    <h3>Responder Ticket</h3>
+    <p class="modal-desc">Ticket <strong id="modal-suporte-id" style="color:var(--text-1)"></strong></p>
+    <textarea id="modal-suporte-resposta" placeholder="Digite sua resposta..." style="width:100%;min-height:100px;background:var(--bg-hover);color:var(--text-1);border:1px solid var(--border);border-radius:8px;padding:10px;font-family:inherit;font-size:13px;resize:vertical;margin:12px 0"></textarea>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal('modal-suporte')">Cancelar</button>
+      <button class="btn-confirm" onclick="confirmarResponderSuporte()">Enviar Resposta</button>
     </div>
   </div>
 </div>
@@ -1200,6 +1233,9 @@ function navTo(page) {
   if (page === 'pedidos')   loadPedidos();
   if (page === 'estoque')   loadEstoque();
   if (page === 'clientes')  loadClientes();
+  if (page === 'leads')     loadLeads();
+  if (page === 'suporte')   loadSuporte();
+  if (page === 'config')    loadConfig();
 }
 
 /* ===== DASHBOARD ===== */
@@ -1474,6 +1510,141 @@ function renderClientes(list) {
         </tr>`;
       }).join('')
     : '<tr><td colspan="6" style="color:var(--text-2);text-align:center;padding:28px">Nenhum cliente encontrado</td></tr>';
+}
+
+/* ===== LEADS ===== */
+const LEAD_STATUS_LABELS = { novo:'🆕 Novo', cliente:'🛍 Cliente', vip:'👑 VIP', inativo:'💤 Inativo' };
+const LEAD_STATUS_COLORS = { novo:'var(--info)', cliente:'var(--success)', vip:'var(--brand)', inativo:'var(--text-3)' };
+
+async function loadLeads() {
+  showEl('leads-loading', true);
+  document.getElementById('leads-error').style.display = 'none';
+  const status = document.getElementById('filter-lead-status').value;
+  try {
+    const data = await apiFetch('/leads' + (status ? '?status=' + status : ''));
+    renderLeads(data.leads || []);
+  } catch(e) {
+    showMsg('leads-error', e.message, 0);
+    document.getElementById('leads-error').style.display = 'block';
+  } finally {
+    showEl('leads-loading', false);
+  }
+}
+
+function renderLeads(list) {
+  document.getElementById('leads-body').innerHTML = list.length
+    ? list.map(l => {
+        const st = l.status || 'novo';
+        const stLabel = LEAD_STATUS_LABELS[st] || st;
+        const stColor = LEAD_STATUS_COLORS[st] || 'var(--text-2)';
+        const wa = (l.celular || '').replace(/\D/g,'');
+        const waLink = wa ? `<a class="wa-link" href="https://wa.me/${wa}" target="_blank">${l.celular}</a>` : (l.celular || '—');
+        const opcoes = Object.entries(LEAD_STATUS_LABELS)
+          .map(([v,t]) => `<option value="${v}"${v===st?' selected':''}>${t}</option>`).join('');
+        return `<tr>
+          <td style="font-weight:500">${l.nome || '—'}</td>
+          <td>${waLink}</td>
+          <td style="color:var(--text-2)">${l.fonte || '—'}</td>
+          <td><span style="color:${stColor};font-weight:600">${stLabel}</span></td>
+          <td>${brl(l.total_gasto)}</td>
+          <td style="color:var(--text-2)">${fmtDate(l.data_criacao)}</td>
+          <td>
+            <select onchange="updateLeadStatus(${l.id}, this.value)" style="background:var(--bg-hover);color:var(--text-1);border:1px solid var(--border);border-radius:6px;padding:3px 6px;font-size:12px">
+              ${opcoes}
+            </select>
+          </td>
+        </tr>`;
+      }).join('')
+    : '<tr><td colspan="7" style="color:var(--text-2);text-align:center;padding:28px">Nenhum lead encontrado</td></tr>';
+}
+
+async function updateLeadStatus(id, status) {
+  try {
+    await apiFetch(`/leads/${id}/status`, { method:'PATCH', body: JSON.stringify({ status }) });
+    showMsg('leads-error', '✓ Status atualizado', 3000);
+    document.getElementById('leads-error').style.display = 'block';
+    document.getElementById('leads-error').style.color = 'var(--success)';
+  } catch(e) {
+    showMsg('leads-error', e.message, 0);
+    document.getElementById('leads-error').style.display = 'block';
+  }
+}
+
+/* ===== SUPORTE ===== */
+async function loadSuporte() {
+  showEl('suporte-loading', true);
+  document.getElementById('suporte-error').style.display = 'none';
+  const status = document.getElementById('filter-suporte-status').value;
+  try {
+    const data = await apiFetch('/suporte' + (status ? '?status=' + status : ''));
+    renderSuporte(data.tickets || []);
+  } catch(e) {
+    showMsg('suporte-error', e.message, 0);
+    document.getElementById('suporte-error').style.display = 'block';
+  } finally {
+    showEl('suporte-loading', false);
+  }
+}
+
+function renderSuporte(list) {
+  document.getElementById('suporte-body').innerHTML = list.length
+    ? list.map(t => {
+        const isAberto = t.status === 'ABERTO';
+        const stColor = isAberto ? 'var(--warning)' : 'var(--success)';
+        const msg = (t.mensagem || '').substring(0,80) + ((t.mensagem||'').length>80?'…':'');
+        const resp = t.resposta ? (t.resposta.substring(0,60)+'…') : '<span style="color:var(--text-3)">—</span>';
+        return `<tr>
+          <td style="font-weight:600;color:var(--text-2)">#${t.id}</td>
+          <td style="font-weight:500">${t.cliente_nome || t.cliente_id || '—'}</td>
+          <td style="color:var(--text-2);max-width:200px">${msg}</td>
+          <td style="color:var(--text-2);max-width:180px">${resp}</td>
+          <td><span style="color:${stColor};font-weight:600">${t.status}</span></td>
+          <td style="color:var(--text-2)">${fmtDate(t.data_criacao)}</td>
+          <td>${isAberto ? `<button class="btn-action" onclick="abrirResponderSuporte(${t.id})">Responder</button>` : '—'}</td>
+        </tr>`;
+      }).join('')
+    : '<tr><td colspan="7" style="color:var(--text-2);text-align:center;padding:28px">Nenhum ticket encontrado</td></tr>';
+}
+
+let _suporteIdAtual = null;
+function abrirResponderSuporte(id) {
+  _suporteIdAtual = id;
+  document.getElementById('modal-suporte-id').textContent = '#' + id;
+  document.getElementById('modal-suporte-resposta').value = '';
+  document.getElementById('modal-suporte').classList.add('open');
+}
+async function confirmarResponderSuporte() {
+  const resposta = document.getElementById('modal-suporte-resposta').value.trim();
+  if (!resposta) return;
+  try {
+    await apiFetch(`/suporte/${_suporteIdAtual}/responder`, { method:'PATCH', body: JSON.stringify({ resposta }) });
+    document.getElementById('modal-suporte').classList.remove('open');
+    loadSuporte();
+  } catch(e) {
+    alert('Erro: ' + e.message);
+  }
+}
+
+/* ===== CONFIG ===== */
+async function loadConfig() {
+  try {
+    await apiFetch('/stats');
+    const usersEl = document.getElementById('config-users');
+    if (usersEl) {
+      usersEl.innerHTML = `
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div style="display:flex;justify-content:space-between;align-items:center;font-size:13px">
+            <div><span style="font-weight:600">Felipe</span> <span style="color:var(--text-2)">— ADMIN</span></div>
+            <span style="padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;background:rgba(240,136,62,.15);color:var(--brand)">ADMIN</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;font-size:13px">
+            <div><span style="font-weight:600">Jully</span> <span style="color:var(--text-2)">— OPERADOR</span></div>
+            <span style="padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;background:rgba(88,166,255,.15);color:var(--info)">OPERADOR</span>
+          </div>
+          <div style="font-size:11px;color:var(--text-3);margin-top:4px">Para adicionar usuarios, edite NUMERO_FELIPE / NUMERO_JULLY no .env da VPS e faca deploy.</div>
+        </div>`;
+    }
+  } catch(e) { /* ignora */ }
 }
 
 /* ===== INIT ===== */
