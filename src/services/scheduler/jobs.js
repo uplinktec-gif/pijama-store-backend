@@ -104,7 +104,7 @@ function agendarAlertasEstoque() {
       if (alertasUrgentes.length > 0) {
         mensagem += `🔴 *URGENTE (encomendar HOJE):*\n`;
         alertasUrgentes.slice(0, 5).forEach(a => {
-          mensagem += `   📦 *${a.modelo}* (${a.tamanho} / ${a.cor})\n`;
+          mensagem += `   📦 *${a.produto}*\n`;
           mensagem += `       ${a.disponivel} un • ${a.diasRestantes} dias restantes\n`;
         });
         mensagem += `\n`;
@@ -113,7 +113,7 @@ function agendarAlertasEstoque() {
       if (avisos.length > 0) {
         mensagem += `🟡 *AVISO (encomendar essa semana):*\n`;
         avisos.slice(0, 5).forEach(a => {
-          mensagem += `   📦 *${a.modelo}* (${a.tamanho} / ${a.cor})\n`;
+          mensagem += `   📦 *${a.produto}*\n`;
           mensagem += `       ${a.disponivel} un • ${a.diasRestantes} dias restantes\n`;
         });
       }
@@ -185,18 +185,19 @@ function agendarBackupAutomatico() {
       const resultado = await realizarBackup();
 
       if (resultado.success) {
-        logger.info(`✅ Backup agendado concluído: ${resultado.arquivo}`);
+        const nomeArquivo = resultado.filename?.split(/[\\/]/).pop() || resultado.filename || '—';
+        logger.info(`✅ Backup agendado concluído: ${nomeArquivo}`);
 
         // Notificar Felipe sobre o backup
         await senderService.enviarMensagem(
           NUMERO_FELIPE,
           `💾 Backup automático realizado com sucesso!\n\n` +
-          `📁 Arquivo: ${resultado.arquivo}\n` +
-          `📊 Tamanho: ${resultado.tamanho_kb} KB\n` +
-          `⏰ Data: ${new Date(resultado.data_backup).toLocaleString('pt-BR')}`
+          `📁 Arquivo: ${nomeArquivo}\n` +
+          `📊 Tamanho: ${resultado.size} KB\n` +
+          `⏰ Data: ${new Date().toLocaleString('pt-BR', { timeZone: 'America/Boa_Vista' })}`
         );
       } else {
-        logger.error('❌ Erro no backup agendado:', resultado.erro);
+        logger.error('❌ Erro no backup agendado:', resultado.error || resultado.erro);
       }
     } catch (error) {
       logger.error('Erro ao executar backup automático:', error.message);
