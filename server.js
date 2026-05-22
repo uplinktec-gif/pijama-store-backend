@@ -33,30 +33,20 @@ async function iniciar() {
   }
 
   let server;
-  let actualPort = PORT;
 
-  // Tentar iniciar o servidor, com fallback para próximas portas se houver erro EADDRINUSE
-  const tryListen = (port) => {
-    return new Promise((resolve, reject) => {
-      const tempServer = app.listen(port, () => {
-        logger.info(`✓ Servidor rodando em http://localhost:${port}`);
-        logger.info(`✓ Ambiente: ${process.env.NODE_ENV || 'development'}`);
-        actualPort = port;
-        server = tempServer;
-        inicializarScheduler();
-        resolve();
-      }).on('error', (err) => {
-        if (err.code === 'EADDRINUSE' && port < PORT + 10) {
-          logger.warn(`Porta ${port} em uso, tentando ${port + 1}...`);
-          tryListen(port + 1).then(resolve).catch(reject);
-        } else {
-          reject(err);
-        }
-      });
+  // Iniciar na porta configurada — sem fallback para portas alternativas
+  // (portas alternativas causam acúmulo de processos zumbis com scheduler ativo)
+  await new Promise((resolve, reject) => {
+    server = app.listen(PORT, () => {
+      logger.info(`✓ Servidor rodando em http://localhost:${PORT}`);
+      logger.info(`✓ Ambiente: ${process.env.NODE_ENV || 'development'}`);
+      inicializarScheduler();
+      resolve();
+    }).on('error', (err) => {
+      logger.error(`✗ Não foi possível iniciar na porta ${PORT}: ${err.message}`);
+      reject(err);
     });
-  };
-
-  await tryListen(actualPort);
+  });
 
   process.on('SIGTERM', () => {
     logger.info('SIGTERM recebido. Encerrando servidor...');
