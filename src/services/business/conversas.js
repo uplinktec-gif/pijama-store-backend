@@ -348,6 +348,11 @@ const FAST_PATH_RULES = [
   { regex: /^@estoque$/i, action: '@estoque' },
   { regex: /^@(an[aá]lise|analysis|vendas|relat[oó]rio?)$/i, action: '@analise' },
   { regex: /^@atualizar\s+/i, action: '@atualizar' },
+  // ⭐ ALERTAS DE ESTOQUE — "alerta de estoque", "alertas", "@alertas"
+  {
+    regex: /(?:@?alerta[s]?\s+(?:de\s+)?estoque|estoque\s+(?:alerta[s]?|baixo|critico|cr[ií]tico)|quais?\s+(?:est[aá]\s+)?acabando|o\s+que\s+t[aá]\s+acabando)/i,
+    action: 'alertas_estoque'
+  },
   // ⭐ RESUMO COMPLETO DO ESTOQUE — "faça um resumo", "manda o estoque", "ver estoque"
   {
     regex: /(?:fa[çc]a?\s+(?:um\s+)?resumo|manda?\s+(?:o\s+)?estoque|ver\s+estoque|lista\s+(?:o\s+)?estoque|me\s+(?:manda|passa|d[aá])\s+(?:o\s+)?estoque|estoque\s+(?:atual|completo|todo))/i,
@@ -462,6 +467,45 @@ async function processarMensagemComContexto(mensagem, clienteWhatsApp) {
         const resposta = gerarSaudacao(clienteWhatsApp);
         logger.info(`[FastPath] Saudação em ${Date.now() - inicio}ms`);
         return { success: true, resposta, tipo: 'SAUDACAO' };
+      }
+
+      // ⭐ Alertas de estoque (consulta banco real — mostra o que está acabando)
+      if (fp.action === 'alertas_estoque') {
+        try {
+          const { analisarEstoque } = await import('./analytics.js');
+          const resultado = await analisarEstoque();
+          const alertas = resultado.alertas || [];
+
+          if (alertas.length === 0) {
+            return { success: true, resposta: '✅ Estoque está ok! Nenhum item crítico no momento.', tipo: 'ALERTAS_ESTOQUE' };
+          }
+
+          let msg = `⚠️ *ALERTAS DE ESTOQUE*\n\n`;
+          const urgentes = alertas.filter(a => a.tipo === 'URGENTE' || a.tipo === 'SEM_ESTOQUE');
+          const avisos = alertas.filter(a => a.tipo === 'AVISO');
+
+          if (urgentes.length > 0) {
+            msg += `🔴 *URGENTE (encomendar HOJE):*\n`;
+            urgentes.forEach(a => {
+              msg += `   📦 *${a.produto}*\n`;
+              msg += `       ${a.disponivel} un • ${a.diasRestantes} dias restantes\n`;
+            });
+            msg += `\n`;
+          }
+          if (avisos.length > 0) {
+            msg += `🟡 *AVISO (encomendar essa semana):*\n`;
+            avisos.slice(0, 5).forEach(a => {
+              msg += `   📦 *${a.produto}*\n`;
+              msg += `       ${a.disponivel} un • ${a.diasRestantes} dias restantes\n`;
+            });
+          }
+
+          logger.info(`[FastPath] Alertas estoque em ${Date.now() - inicio}ms`);
+          return { success: true, resposta: msg, tipo: 'ALERTAS_ESTOQUE' };
+        } catch (err) {
+          logger.error('[FastPath] Erro alertas estoque:', err.message);
+          return { success: false, resposta: 'Erro ao consultar alertas. Tenta de novo?', tipo: 'ALERTAS_ESTOQUE' };
+        }
       }
 
       // ⭐ Resumo completo do estoque (NOVO: consulta banco real)
