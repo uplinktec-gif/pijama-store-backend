@@ -1,6 +1,41 @@
 import { query, queryOne, run } from '../config/database.js';
 import { logger } from '../utils/logger.js';
 import { generateSKU } from '../services/sqlite/estoque.js';
+import { gerarToken } from '../middleware/adminAuth.js';
+
+// ---------------------------------------------------------------------------
+// AUTH (login — rota pública, sem IP whitelist)
+// ---------------------------------------------------------------------------
+
+const USUARIOS_ADMIN = {
+  felipe: { nome: 'Felipe', senhaEnv: 'ADMIN_SENHA_FELIPE', senhaDefault: 'pijama2025', role: 'admin' },
+  jully:  { nome: 'Júlly',  senhaEnv: 'ADMIN_SENHA_JULLY',  senhaDefault: 'jully2025',  role: 'operador' },
+  pluma:  { nome: 'Pluma',  senhaEnv: 'ADMIN_SENHA_PLUMA',  senhaDefault: 'pluma2025',  role: 'operador' },
+};
+
+export async function adminLogin(req, res) {
+  try {
+    const { usuario, senha } = req.body;
+    if (!usuario || !senha) {
+      return res.status(400).json({ error: 'Usuário e senha obrigatórios' });
+    }
+    const user = USUARIOS_ADMIN[usuario.toLowerCase()];
+    if (!user) {
+      return res.status(401).json({ error: 'Credenciais inválidas' });
+    }
+    const senhaCorreta = process.env[user.senhaEnv] || user.senhaDefault;
+    if (senha !== senhaCorreta) {
+      logger.warn(`[admin] Tentativa de login falhou: ${usuario}`);
+      return res.status(401).json({ error: 'Credenciais inválidas' });
+    }
+    const token = gerarToken({ nome: user.nome, role: user.role });
+    logger.info(`[admin] Login: ${usuario}`);
+    return res.json({ token, nome: user.nome, role: user.role });
+  } catch (error) {
+    logger.error('[admin] login:', error.message);
+    return res.status(500).json({ error: error.message });
+  }
+}
 
 // ---------------------------------------------------------------------------
 // DASHBOARD

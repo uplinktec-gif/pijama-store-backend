@@ -1,16 +1,21 @@
 import express from 'express';
-import { ipWhitelist } from '../middleware/ipWhitelist.js';
+import { adminAuth } from '../middleware/adminAuth.js';
 import * as adminCtrl from '../controllers/admin.controller.js';
 
 const router = express.Router();
 
-// Aplicar IP whitelist em todas as rotas admin
-router.use(ipWhitelist);
+// ---------------------------------------------------------------------------
+// AUTH — rota pública (sem token, sem IP whitelist)
+// ---------------------------------------------------------------------------
+router.post('/auth/login', adminCtrl.adminLogin);
+
+// Proteger todas as outras rotas com JWT
+router.use(adminAuth);
 
 // ---------------------------------------------------------------------------
 // DASHBOARD
 // ---------------------------------------------------------------------------
-router.get('/dashboard/stats', adminCtrl.getDashboardStats);
+router.get('/stats', adminCtrl.getDashboardStats);
 
 // ---------------------------------------------------------------------------
 // ESTOQUE
