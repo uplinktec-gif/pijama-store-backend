@@ -61,13 +61,13 @@ scp -r -i "$SSH_KEY" -o StrictHostKeyChecking=no \
   || err "Falha ao enviar scripts/"
 ok "scripts/ enviado"
 
-# 6. Envia server.js e package.json
+# 6. Envia server.js, package.json e ecosystem.config.cjs (PM2)
 info "Enviando server.js e package.json..."
 scp -i "$SSH_KEY" -o StrictHostKeyChecking=no \
-  server.js package.json \
+  server.js package.json ecosystem.config.cjs \
   "$VPS_USER@$VPS_IP:$VPS_DIR/" > /dev/null 2>&1 \
   || err "Falha ao enviar server.js/package.json"
-ok "server.js e package.json enviados"
+ok "server.js, package.json e ecosystem.config.cjs enviados"
 
 # 7. Envia .env
 if [ -f ".env" ]; then

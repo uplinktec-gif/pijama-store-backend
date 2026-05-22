@@ -28,3 +28,11 @@ memory, and will not scale past a single process.
 [2026-05-21 16:06:28] INFO:    • Backup Automático (02h) 
 [2026-05-21 16:06:28] INFO:    • Resumo para Júlly (20h) 
 [2026-05-21 16:06:28] INFO:    • Relatório Semanal (Dom 20h) 
+[2026-05-21 22:00:00] INFO: 🕕 Iniciando relatório diário agendado 
+[2026-05-21 22:00:00] INFO: Gerando relatório diário completo 
+[2026-05-21 22:00:00] INFO: Analisando vendas dos últimos 1 dias 
+[2026-05-21 22:00:00] INFO: Analisando níveis de estoque 
+[2026-05-21 22:00:00] INFO: Analisando vendas dos últimos 7 dias 
+[2026-05-21 22:00:00] INFO: Analisando base de clientes 
+[2026-05-21 22:00:05] INFO: ✓ Mensagem enviada para 95981188675 (ID: 3EB04CC6C4EF73C6BD882E) 
+[2026-05-21 22:00:05] INFO: ✓ Relatório diário enviado para Felipe 

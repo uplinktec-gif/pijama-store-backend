@@ -16,24 +16,30 @@ if (fotos.length === 0) {
   process.exit(0);
 }
 
-console.log('\n📸 Fotos ZARA atuais:');
+console.log('\n📸 Corrigindo fotos ZARA (mantendo apenas 1 por cor):');
 let atualizados = 0;
 
 for (const foto of fotos) {
   let ids = [];
-  try { ids = JSON.parse(foto.photo_ids_json || '[]'); } catch { ids = []; }
+  try {
+    const parsed = JSON.parse(foto.photo_ids_json || '[]');
+    // Bug de migração: IDs podem vir como ["id1,id2,id3"] (string única com vírgulas)
+    // ou como ["id1","id2","id3"] (array correto)
+    if (Array.isArray(parsed) && parsed.length === 1 && typeof parsed[0] === 'string' && parsed[0].includes(',')) {
+      // Formato antigo: um único string com IDs separados por vírgula
+      ids = parsed[0].split(',').map(id => id.trim()).filter(Boolean);
+    } else {
+      ids = parsed.filter(Boolean);
+    }
+  } catch { ids = []; }
 
-  console.log(`  ${foto.cor}: ${ids.length} foto(s)`);
+  console.log(`  ${foto.cor}: ${ids.length} foto(s) — mantendo apenas: ${ids[0]}`);
 
-  if (ids.length > 1) {
-    const novoJson = JSON.stringify([ids[0]]);
-    run('UPDATE fotos SET photo_ids_json = ?, updated_at = ? WHERE id = ?',
-        [novoJson, new Date().toISOString(), foto.id]);
-    console.log(`    ✅ Reduzido para 1 foto (mantida: ${ids[0]})`);
-    atualizados++;
-  } else {
-    console.log(`    — Já tem ${ids.length} foto, sem alteração`);
-  }
+  // Sempre salvar com apenas o 1º ID no formato correto (array de strings)
+  const novoJson = JSON.stringify([ids[0]]);
+  run('UPDATE fotos SET photo_ids_json = ?, updated_at = ? WHERE id = ?',
+      [novoJson, new Date().toISOString(), foto.id]);
+  atualizados++;
 }
 
 saveDatabase(true);

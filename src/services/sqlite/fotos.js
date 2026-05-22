@@ -18,8 +18,17 @@ export async function lerFotos() {
 
       let ids = [];
       try {
-        ids = JSON.parse(row.photo_ids_json || '[]');
-        if (!Array.isArray(ids)) ids = [ids].filter(Boolean);
+        const parsed = JSON.parse(row.photo_ids_json || '[]');
+        if (Array.isArray(parsed)) {
+          // Bug de migração: pode ser ["id1,id2,id3"] (string única com vírgulas)
+          if (parsed.length === 1 && typeof parsed[0] === 'string' && parsed[0].includes(',')) {
+            ids = parsed[0].split(',').map(id => id.trim()).filter(Boolean);
+          } else {
+            ids = parsed.filter(Boolean);
+          }
+        } else if (typeof parsed === 'string') {
+          ids = parsed.split(',').map(id => id.trim()).filter(Boolean);
+        }
       } catch (_) {
         ids = [];
       }
