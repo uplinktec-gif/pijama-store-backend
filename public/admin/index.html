@@ -8,8 +8,53 @@
 </head>
 <body>
 
+  <!-- LOGIN MODAL -->
+  <div id="login-modal" class="modal-fullscreen">
+    <div class="login-container">
+      <div class="login-box">
+        <div class="login-header">
+          <div style="font-size: 48px; margin-bottom: 20px;">🌙</div>
+          <h1>Pluma Admin</h1>
+          <p>Painel de Gestão</p>
+        </div>
+
+        <form id="login-form">
+          <div class="form-group">
+            <label for="login-usuario">Usuário</label>
+            <input
+              type="text"
+              id="login-usuario"
+              placeholder="felipe, jully ou pluma"
+              required
+              autofocus
+            >
+          </div>
+
+          <div class="form-group">
+            <label for="login-senha">Senha</label>
+            <input
+              type="password"
+              id="login-senha"
+              placeholder="Digite sua senha"
+              required
+            >
+          </div>
+
+          <button type="submit" class="btn btn-primary btn-block">
+            Entrar
+          </button>
+        </form>
+
+        <p style="text-align: center; margin-top: 20px; font-size: 12px; color: #666;">
+          Credenciais padrão:<br>
+          Felipe: pijama2025 | Jully/Pluma: jully2025/pluma2025
+        </p>
+      </div>
+    </div>
+  </div>
+
   <!-- Sidebar -->
-  <nav id="sidebar">
+  <nav id="sidebar" class="hidden">
     <div class="sidebar-header">
       <div class="logo">🌙 Pluma</div>
       <div class="logo-sub">Painel Admin</div>
@@ -24,14 +69,17 @@
     </ul>
     <div class="sidebar-footer">
       <small id="last-update"></small>
+      <button id="logout-btn" class="btn btn-sm btn-logout hidden" style="width: 100%; margin-top: 15px;">
+        🚪 Logout
+      </button>
     </div>
   </nav>
 
   <!-- Hamburger para mobile -->
-  <button id="menu-toggle">☰</button>
+  <button id="menu-toggle" class="hidden">☰</button>
 
   <!-- Conteúdo Principal -->
-  <main id="content">
+  <main id="content" class="hidden">
 
     <!-- DASHBOARD -->
     <section id="section-dashboard" class="section">

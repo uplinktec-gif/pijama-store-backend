@@ -8,15 +8,95 @@ let paginaClientes = 0;
 const LIMITE = 50;
 
 // ─────────────────────────────────────────────
+// AUTHENTICATION
+// ─────────────────────────────────────────────
+
+function getToken() {
+  return localStorage.getItem('admin_token');
+}
+
+function setToken(token) {
+  localStorage.setItem('admin_token', token);
+}
+
+function clearToken() {
+  localStorage.removeItem('admin_token');
+}
+
+function isAuthenticated() {
+  return !!getToken();
+}
+
+async function fazerLogin(usuario, senha) {
+  try {
+    const res = await fetch(`${API}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ usuario, senha })
+    });
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || 'Credenciais inválidas');
+    }
+
+    const data = await res.json();
+    setToken(data.token);
+    document.getElementById('login-modal').classList.add('hidden');
+    document.getElementById('content').classList.remove('hidden');
+    document.getElementById('sidebar').classList.remove('hidden');
+    document.getElementById('menu-toggle').classList.remove('hidden');
+    document.getElementById('logout-btn').classList.remove('hidden');
+    showToast(`Bem-vindo, ${data.nome}!`, 'success');
+    loadDashboard();
+    return true;
+  } catch (error) {
+    showToast('Erro: ' + error.message, 'error');
+    return false;
+  }
+}
+
+function fazerLogout() {
+  clearToken();
+  document.getElementById('login-modal').classList.remove('hidden');
+  document.getElementById('content').classList.add('hidden');
+  document.getElementById('sidebar').classList.add('hidden');
+  document.getElementById('menu-toggle').classList.add('hidden');
+  document.getElementById('logout-btn').classList.add('hidden');
+  document.getElementById('login-usuario').value = '';
+  document.getElementById('login-senha').value = '';
+  showToast('Logout realizado', 'success');
+}
+
+// ─────────────────────────────────────────────
 // CORE: apiFetch, navegação, toast, debounce
 // ─────────────────────────────────────────────
 
 async function apiFetch(path, options = {}) {
+  const token = getToken();
+  const headers = {
+    'Content-Type': 'application/json',
+    ...options.headers
+  };
+
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+
   const res = await fetch(`${API}${path}`, {
-    headers: { 'Content-Type': 'application/json', ...options.headers },
+    headers,
     ...options,
     body: options.body ? JSON.stringify(options.body) : undefined
   });
+
+  // Se token expirou (401), fazer logout
+  if (res.status === 401) {
+    clearToken();
+    document.getElementById('login-modal').classList.remove('hidden');
+    document.getElementById('content').classList.add('hidden');
+    showToast('Sessão expirada. Faça login novamente.', 'error');
+    throw new Error('Sessão expirada');
+  }
 
   if (res.status === 403) {
     showToast('Acesso negado (IP não autorizado)', 'error');
@@ -676,11 +756,42 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // Carregar dashboard inicial
-  loadDashboard();
+  // Login form submit
+  const loginForm = document.getElementById('login-form');
+  if (loginForm) {
+    loginForm.addEventListener('submit', async e => {
+      e.preventDefault();
+      const usuario = document.getElementById('login-usuario').value;
+      const senha = document.getElementById('login-senha').value;
+      await fazerLogin(usuario, senha);
+    });
+  }
+
+  // Logout button
+  const logoutBtn = document.getElementById('logout-btn');
+  if (logoutBtn) {
+    logoutBtn.addEventListener('click', fazerLogout);
+  }
+
+  // Verificar autenticação na carga
+  if (isAuthenticated()) {
+    document.getElementById('login-modal').classList.add('hidden');
+    document.getElementById('content').classList.remove('hidden');
+    document.getElementById('sidebar').classList.remove('hidden');
+    document.getElementById('menu-toggle').classList.remove('hidden');
+    document.getElementById('logout-btn').classList.remove('hidden');
+    loadDashboard();
+  } else {
+    document.getElementById('login-modal').classList.remove('hidden');
+    document.getElementById('content').classList.add('hidden');
+    document.getElementById('sidebar').classList.add('hidden');
+    document.getElementById('menu-toggle').classList.add('hidden');
+    document.getElementById('logout-btn').classList.add('hidden');
+  }
 
   // Auto-refresh do dashboard a cada 60s
   setInterval(() => {
+    if (!isAuthenticated()) return;
     const dashboardAtivo = !document.getElementById('section-dashboard').classList.contains('hidden');
     if (dashboardAtivo) loadDashboard();
   }, 60000);
