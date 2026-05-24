@@ -1,7 +1,7 @@
 import { query, queryOne, run } from '../config/database.js';
 import { logger } from '../utils/logger.js';
 import { generateSKU } from '../services/sqlite/estoque.js';
-import { gerarToken } from '../middleware/adminAuth.js';
+import { gerarToken } from '../middleware/authAdmin.js';
 import bcrypt from 'bcryptjs';
 
 // ---------------------------------------------------------------------------

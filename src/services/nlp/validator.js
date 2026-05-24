@@ -1,6 +1,6 @@
 import { logger } from '../../utils/logger.js';
 import { env } from '../../config/env.js';
-import * as estoqueService from '../sheets/estoque.js';
+import * as estoqueService from '../sqlite/estoque.js';
 
 /**
  * Valida se um modelo existe no catálogo

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { logger } from '../utils/logger.js';
-import { listarTodosPendentes } from '../services/sheets/pedidos.js';
-import { readAllEstoque } from '../services/sheets/estoque.js';
+import { listarTodosPendentes } from '../services/sqlite/pedidos.js';
+import { readAllEstoque } from '../services/sqlite/estoque.js';
 
 const router = Router();
 

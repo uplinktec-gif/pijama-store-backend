@@ -2,7 +2,7 @@ import { logger } from '../utils/logger.js';
 import * as businessEstoque from '../services/business/estoque.js';
 import * as businessClientes from '../services/business/clientes.js';
 import * as businessPedidos from '../services/business/pedidos.js';
-import * as backupService from '../services/backup/backupSheets.js';
+import * as backupService from '../services/backup/backupSQLite.js';
 import { temPermissao } from '../config/users.js';
 import fs from 'fs';
 import path from 'path';

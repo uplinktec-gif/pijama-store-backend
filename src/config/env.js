@@ -21,10 +21,6 @@ const env = {
   port: process.env.PORT || 3000,
   logLevel: process.env.LOG_LEVEL || 'info',
 
-  // Google Sheets
-  googleSheetsCredentialsPath: process.env.GOOGLE_SHEETS_CREDENTIALS_PATH,
-  googleSheetsId: process.env.GOOGLE_SHEETS_ID,
-
   // Evolution API (WhatsApp)
   evolutionApiUrl: process.env.EVOLUTION_API_URL || 'http://177.7.47.211:32775',
   evolutionApiKey: process.env.EVOLUTION_API_KEY,

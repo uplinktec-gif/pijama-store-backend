@@ -1,7 +1,7 @@
 import express from 'express';
-import { readAllEstoque } from '../services/sheets/estoque.js';
-import { criarPedido } from '../services/sheets/pedidos.js';
-import { findByWhatsApp, criarCliente } from '../services/sheets/clientes.js';
+import { readAllEstoque } from '../services/sqlite/estoque.js';
+import { criarPedido } from '../services/sqlite/pedidos.js';
+import { findByWhatsApp, criarCliente } from '../services/sqlite/clientes.js';
 import { lerFotos, inicializarAbaFotos, atualizarCapa } from '../services/sqlite/fotos.js';
 import { logger } from '../utils/logger.js';
 import { enviarMensagem } from '../services/whatsapp/sender.js';

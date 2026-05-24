@@ -1,101 +1,118 @@
 import fs from 'fs';
-import { join, dirname } from 'path';
+import path from 'path';
 import { fileURLToPath } from 'url';
 import { logger } from '../../utils/logger.js';
-import { getDatabase, saveDatabase } from '../../config/database.js';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-const DB_PATH = join(__dirname, '../../../data/pijama-store.db');
-const BACKUP_DIR = join(__dirname, '../../../data/backups');
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const projectRoot = path.join(__dirname, '../../..');
+const backupDir = path.join(projectRoot, 'data/backups');
 
 /**
- * Realiza backup do banco SQLite
+ * Garante que diretório de backups existe
  */
-export async function realizarBackup() {
-  try {
-    if (!fs.existsSync(BACKUP_DIR)) {
-      fs.mkdirSync(BACKUP_DIR, { recursive: true });
-    }
-
-    // Forçar save antes de copiar
-    saveDatabase(true);
-
-    if (!fs.existsSync(DB_PATH)) {
-      logger.warn('[backup] Arquivo de banco não encontrado:', DB_PATH);
-      return { success: false, error: 'Banco não encontrado' };
-    }
-
-    const timestamp = new Date().toISOString().split('T')[0];
-    const backupFile = join(BACKUP_DIR, `pijama-${timestamp}.db`);
-
-    fs.copyFileSync(DB_PATH, backupFile);
-
-    const stats = fs.statSync(backupFile);
-    const sizeKB = Math.round(stats.size / 1024);
-
-    logger.info(`✓ Backup criado: ${backupFile} (${sizeKB}KB)`);
-
-    // Limpar backups com mais de 30 dias
-    await limparBackupsAntigos(30);
-
-    return { success: true, filename: backupFile, size: sizeKB };
-  } catch (error) {
-    logger.error('[backup] Erro ao realizar backup:', error.message);
-    return { success: false, error: error.message };
+function ensureBackupDir() {
+  if (!fs.existsSync(backupDir)) {
+    fs.mkdirSync(backupDir, { recursive: true });
   }
 }
 
 /**
- * Lista backups disponíveis
+ * Retorna informações do último backup
  */
-export function listarBackups() {
-  try {
-    if (!fs.existsSync(BACKUP_DIR)) return [];
+function obterUltimoBackup() {
+  ensureBackupDir();
 
-    return fs.readdirSync(BACKUP_DIR)
+  try {
+    const arquivos = fs.readdirSync(backupDir)
       .filter(f => f.endsWith('.db'))
       .map(f => {
-        const stats = fs.statSync(join(BACKUP_DIR, f));
+        const fullPath = path.join(backupDir, f);
+        const stat = fs.statSync(fullPath);
         return {
           filename: f,
-          path: join(BACKUP_DIR, f),
-          size: Math.round(stats.size / 1024),
-          created: stats.mtime.toISOString()
+          size: stat.size,
+          mtime: stat.mtime
         };
       })
-      .sort((a, b) => new Date(b.created) - new Date(a.created));
+      .sort((a, b) => b.mtime - a.mtime);
+
+    return arquivos.length > 0 ? arquivos[0] : null;
   } catch (error) {
-    logger.error('[backup] Erro ao listar backups:', error.message);
+    logger.error('Erro ao obter último backup:', error.message);
+    return null;
+  }
+}
+
+/**
+ * Lista todos os backups
+ */
+function listarBackups() {
+  ensureBackupDir();
+
+  try {
+    const arquivos = fs.readdirSync(backupDir)
+      .filter(f => f.endsWith('.db'))
+      .map(f => {
+        const fullPath = path.join(backupDir, f);
+        const stat = fs.statSync(fullPath);
+        return {
+          filename: f,
+          size: stat.size,
+          mtime: stat.mtime
+        };
+      })
+      .sort((a, b) => b.mtime - a.mtime);
+
+    return arquivos;
+  } catch (error) {
+    logger.error('Erro ao listar backups:', error.message);
     return [];
   }
 }
 
 /**
- * Remove backups mais antigos que N dias
+ * Realiza backup do banco de dados
  */
-async function limparBackupsAntigos(diasLimite = 30) {
+function realizarBackup(sourceDbPath = null) {
+  ensureBackupDir();
+
   try {
-    if (!fs.existsSync(BACKUP_DIR)) return;
+    const dbPath = sourceDbPath || path.join(projectRoot, 'data/pijama-store.db');
 
-    const corte = Date.now() - (diasLimite * 86400000);
-    const arquivos = fs.readdirSync(BACKUP_DIR).filter(f => f.endsWith('.db'));
-
-    let removidos = 0;
-    for (const arquivo of arquivos) {
-      const caminho = join(BACKUP_DIR, arquivo);
-      const stats = fs.statSync(caminho);
-      if (stats.mtime.getTime() < corte) {
-        fs.unlinkSync(caminho);
-        removidos++;
-      }
+    if (!fs.existsSync(dbPath)) {
+      logger.warn('Arquivo de banco de dados não encontrado:', dbPath);
+      return {
+        success: false,
+        error: 'Banco de dados não encontrado'
+      };
     }
 
-    if (removidos > 0) {
-      logger.info(`[backup] ${removidos} backup(s) antigo(s) removido(s)`);
-    }
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const backupFileName = `pijama-store-backup-${timestamp}.db`;
+    const backupPath = path.join(backupDir, backupFileName);
+
+    fs.copyFileSync(dbPath, backupPath);
+
+    logger.info(`✓ Backup realizado: ${backupFileName}`);
+
+    return {
+      success: true,
+      filename: backupFileName,
+      path: backupPath,
+      size: fs.statSync(backupPath).size
+    };
   } catch (error) {
-    logger.warn('[backup] Erro ao limpar backups antigos:', error.message);
+    logger.error('Erro ao realizar backup:', error.message);
+    return {
+      success: false,
+      error: error.message
+    };
   }
 }
+
+export {
+  obterUltimoBackup,
+  listarBackups,
+  realizarBackup,
+  ensureBackupDir
+};
