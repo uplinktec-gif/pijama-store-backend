@@ -2,38 +2,94 @@ import { query, queryOne, run } from '../config/database.js';
 import { logger } from '../utils/logger.js';
 import { generateSKU } from '../services/sqlite/estoque.js';
 import { gerarToken } from '../middleware/adminAuth.js';
+import bcrypt from 'bcryptjs';
 
 // ---------------------------------------------------------------------------
 // AUTH (login — rota pública, sem IP whitelist)
 // ---------------------------------------------------------------------------
 
-const USUARIOS_ADMIN = {
-  felipe: { nome: 'Felipe', senhaEnv: 'ADMIN_SENHA_FELIPE', senhaDefault: 'pijama2025', role: 'admin' },
-  jully:  { nome: 'Júlly',  senhaEnv: 'ADMIN_SENHA_JULLY',  senhaDefault: 'jully2025',  role: 'operador' },
-  pluma:  { nome: 'Pluma',  senhaEnv: 'ADMIN_SENHA_PLUMA',  senhaDefault: 'pluma2025',  role: 'operador' },
-};
-
+/**
+ * Login com autenticação JWT
+ * POST /admin/api/auth/login
+ * Body: { username, password }
+ */
 export async function adminLogin(req, res) {
   try {
-    const { usuario, senha } = req.body;
-    if (!usuario || !senha) {
-      return res.status(400).json({ error: 'Usuário e senha obrigatórios' });
+    console.log('[DEBUG-ADMIN-LOGIN] Called with body:', req.body);
+    const { username, password, usuario, senha } = req.body;
+
+    // Aceitar ambos os formatos para compatibilidade
+    const user = username || usuario;
+    const pass = password || senha;
+
+    if (!user || !pass) {
+      return res.status(400).json({
+        success: false,
+        error: 'Username/usuario e password/senha são obrigatórios'
+      });
     }
-    const user = USUARIOS_ADMIN[usuario.toLowerCase()];
-    if (!user) {
-      return res.status(401).json({ error: 'Credenciais inválidas' });
+
+    // Buscar usuário no banco de dados
+    const usuarioRecord = queryOne(
+      'SELECT id, username, email, senha_hash, ativo FROM admin_usuarios WHERE username = ?',
+      [user]
+    );
+
+    if (!usuarioRecord) {
+      logger.warn(`[admin-login] Usuário não encontrado: ${user}`);
+      return res.status(401).json({
+        success: false,
+        error: 'Credenciais inválidas'
+      });
     }
-    const senhaCorreta = process.env[user.senhaEnv] || user.senhaDefault;
-    if (senha !== senhaCorreta) {
-      logger.warn(`[admin] Tentativa de login falhou: ${usuario}`);
-      return res.status(401).json({ error: 'Credenciais inválidas' });
+
+    // Verificar se está ativo
+    if (!usuarioRecord.ativo) {
+      logger.warn(`[admin-login] Usuário inativo: ${user}`);
+      return res.status(403).json({
+        success: false,
+        error: 'Usuário desativado'
+      });
     }
-    const token = gerarToken({ nome: user.nome, role: user.role });
-    logger.info(`[admin] Login: ${usuario}`);
-    return res.json({ token, nome: user.nome, role: user.role });
+
+    // Comparar senha com bcrypt
+    const senhaValida = await bcrypt.compare(pass, usuarioRecord.senha_hash);
+    if (!senhaValida) {
+      logger.warn(`[admin-login] Senha incorreta: ${user}`);
+      return res.status(401).json({
+        success: false,
+        error: 'Credenciais inválidas'
+      });
+    }
+
+    // Gerar token JWT
+    const token = gerarToken({
+      id: usuarioRecord.id,
+      username: usuarioRecord.username,
+      email: usuarioRecord.email
+    });
+
+    logger.info(`[admin-login] ✓ Login bem-sucedido: ${user}`);
+
+    // Retornar token no formato esperado (compatível com ambas as interfaces)
+    return res.json({
+      success: true,
+      token,
+      usuario: {
+        id: usuarioRecord.id,
+        username: usuarioRecord.username,
+        email: usuarioRecord.email
+      },
+      // Compatibilidade com formato antigo
+      nome: usuarioRecord.username,
+      role: 'admin'
+    });
   } catch (error) {
-    logger.error('[admin] login:', error.message);
-    return res.status(500).json({ error: error.message });
+    logger.error('[admin-login] Erro:', error.message);
+    return res.status(500).json({
+      success: false,
+      error: 'Erro ao processar login'
+    });
   }
 }
 
