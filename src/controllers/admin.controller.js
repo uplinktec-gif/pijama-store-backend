@@ -15,7 +15,7 @@ import bcrypt from 'bcryptjs';
  */
 export async function adminLogin(req, res) {
   try {
-    console.log('[DEBUG-ADMIN-LOGIN] Called with body:', req.body);
+    console.log('[NEW-CODE-v2-3bc24c7]:', req.body);
     const { username, password, usuario, senha } = req.body;
 
     // Aceitar ambos os formatos para compatibilidade
