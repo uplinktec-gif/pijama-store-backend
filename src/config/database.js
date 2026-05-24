@@ -324,6 +324,19 @@ function createTables() {
       )
     `);
 
+    // 8. ADMIN_USUARIOS (Autenticação do Painel Admin)
+    db.run(`
+      CREATE TABLE IF NOT EXISTS admin_usuarios (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username VARCHAR(100) UNIQUE NOT NULL,
+        email VARCHAR(100),
+        senha_hash VARCHAR(255) NOT NULL,
+        ativo BOOLEAN DEFAULT 1,
+        criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        atualizado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     // Índices para performance
     const indices = [
       'CREATE INDEX IF NOT EXISTS idx_pedidos_whatsapp ON pedidos(cliente_whatsapp)',
@@ -338,6 +351,7 @@ function createTables() {
       'CREATE INDEX IF NOT EXISTS idx_conversas_whatsapp ON conversas(whatsapp)',
       'CREATE INDEX IF NOT EXISTS idx_estoque_modelo ON estoque(modelo)',
       'CREATE INDEX IF NOT EXISTS idx_estoque_status ON estoque(status)',
+      'CREATE INDEX IF NOT EXISTS idx_admin_usuarios_username ON admin_usuarios(username)',
     ];
 
     for (const idx of indices) {
