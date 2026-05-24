@@ -1,4 +1,4 @@
-import { query, run } from '../src/config/database.js';
+import { initializeDatabase, query, run, saveDatabase } from '../src/config/database.js';
 import bcrypt from 'bcryptjs';
 import { logger } from '../src/utils/logger.js';
 
@@ -9,6 +9,9 @@ import { logger } from '../src/utils/logger.js';
 
 async function initAdminUser() {
   try {
+    // Inicializar o banco de dados
+    await initializeDatabase();
+
     const adminUsers = [
       { username: 'admin', password: 'admin', nome: 'Admin', email: 'admin@pluma.com' },
       { username: 'felipe', password: process.env.ADMIN_SENHA_FELIPE || 'pijama2025', nome: 'Felipe', email: 'felipe@pluma.com' },
@@ -46,6 +49,9 @@ async function initAdminUser() {
         console.error(`❌ Erro ao criar usuário ${user.username}:`, error.message);
       }
     }
+
+    // Forçar save do banco de dados
+    saveDatabase(true);
 
     console.log('\n✅ Inicialização concluída!');
     process.exit(0);
