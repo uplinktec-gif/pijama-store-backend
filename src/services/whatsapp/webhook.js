@@ -46,6 +46,14 @@ function validarWebhook(mode, token, challenge) {
  */
 async function processarMensagem(body) {
   try {
+    // ─── Ignorar eventos de read receipts silenciosamente ────────
+    // messages.update = mensagem foi lida, não é uma nova mensagem
+    if (body?.event === 'messages.update') {
+      logger.debug(`[webhook] ℹ️ Read receipt ignorado: ${body?.data?.key?.id}`);
+      return { processed: false, reason: 'read_receipt' };
+    }
+    // ──────────────────────────────────────────────────────────────
+
     const messages = extrairMensagensDoPayload(body);
 
     if (!messages || messages.length === 0) {
