@@ -496,6 +496,38 @@ button:disabled {
   box-shadow: 0 0 0 3px rgba(231, 84, 128, 0.2);
 }
 
+.color-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: auto;
+}
+
+.color-button:disabled:hover {
+  background-color: inherit;
+  transform: none;
+}
+
+.color-button:disabled::after {
+  content: "Fora de estoque";
+  position: absolute;
+  bottom: -25px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.8);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.2s;
+  pointer-events: none;
+}
+
+.color-button:disabled:hover::after {
+  opacity: 1;
+}
+
 .back-button {
   background: white;
   color: #e75480;

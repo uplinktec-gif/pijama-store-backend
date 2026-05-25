@@ -565,20 +565,17 @@ function selecionarTamanho(tamanho) {
   produtoSelecionado.tamanho = tamanho;
 
   const modeloData = estoqueGlobal[produtoSelecionado.modelo];
-  const cores = new Set();
+  const cores = {}; // Armazenar cor → disponibilidade
 
-  // Coletar cores disponíveis para o tamanho selecionado
+  // Coletar cores com disponibilidade para o tamanho selecionado
   for (const key in modeloData) {
     const [t, cor] = key.split('|');
     if (t === tamanho) {
-      const item = modeloData[key];
-      if (item.disponivel > 0) {
-        cores.add(cor);
-      }
+      cores[cor] = modeloData[key].disponivel;
     }
   }
 
-  if (cores.size === 0) {
+  if (Object.keys(cores).length === 0) {
     alert(`Nenhuma cor disponível para o tamanho ${tamanho}`);
     return;
   }
@@ -601,11 +598,15 @@ function selecionarTamanho(tamanho) {
     'BRANCO': '#f3f4f6'
   };
 
-  Array.from(cores).sort().forEach(cor => {
+  Object.keys(cores).sort().forEach(cor => {
     const corHex = coresPorSigla[cor] || '#cccccc';
+    const disponivel = cores[cor];
+    const isDisabled = disponivel === 0;
+    const disabledAttr = isDisabled ? ' disabled' : '';
+    const onclickAttr = isDisabled ? '' : `onclick="selecionarCor('${cor}')"`;
+
     colorHTML += `
-      <button type="button" class="color-button" style="background-color: ${corHex}; border: 2px solid #ddd;"
-              onclick="selecionarCor('${cor}')" title="${cor}"></button>
+      <button type="button" class="color-button" style="background-color: ${corHex}; border: 2px solid #ddd;"${disabledAttr}${onclickAttr ? ' ' + onclickAttr : ''} title="${cor}"></button>
     `;
   });
 
