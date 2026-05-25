@@ -1,81 +1,51 @@
-import express from 'express';
-import { verificarToken } from '../middleware/jwtAuth.js';
-import { adminLogin } from '../controllers/admin.controller.js';
+import { Router } from 'express';
+import { ipWhitelist } from '../middleware/ipWhitelist.js';
 import {
   getDashboardStats,
-  // Estoque
-  getEstoque,
+  listEstoque,
+  createEstoque,
   updateEstoqueQuantidade,
   updateEstoquePreco,
-  createEstoqueItem,
-  getEstoqueHistorico,
-  // Pedidos
-  getPedidos,
-  getPedidoDetalhe,
-  updatePedidoPagamento,
-  updatePedidoEntrega,
-  updatePedidoEndereco,
-  // Clientes
-  getClientes,
-  getClienteDetalhe,
+  listPedidos,
+  getPedidoDetail,
+  updatePagamento,
+  updateEntrega,
+  updateEndereco,
+  listClientes,
+  getClienteDetail,
   getClientePedidos,
-  updateCliente,
-  // Leads
-  getLeads,
-  updateLeadStatus,
-  // Suporte
-  getSuporte,
-  responderSuporte
+  listLeads,
+  updateLeadStatus
 } from '../controllers/admin.controller.js';
 
-const router = express.Router();
+const router = Router();
 
-// ============================================================
-// AUTENTICAÇÃO (pública)
-// ============================================================
-router.post('/auth/login', adminLogin);
+// Aplicar middleware de IP whitelist a todos os endpoints
+router.use(ipWhitelist);
 
-// ============================================================
-// DASHBOARD (protegido)
-// ============================================================
-router.get('/stats', verificarToken, getDashboardStats);
+// DASHBOARD
+router.get('/api/dashboard/stats', getDashboardStats);
 
-// ============================================================
-// ESTOQUE (protegido)
-// ============================================================
-router.get('/estoque', verificarToken, getEstoque);
-router.get('/estoque/historico', verificarToken, getEstoqueHistorico);
-router.post('/estoque', verificarToken, createEstoqueItem);
-router.patch('/estoque/:sku/quantidade', verificarToken, updateEstoqueQuantidade);
-router.patch('/estoque/:sku/preco', verificarToken, updateEstoquePreco);
+// ESTOQUE (4 endpoints)
+router.get('/api/estoque', listEstoque);
+router.post('/api/estoque', createEstoque);
+router.patch('/api/estoque/:sku/quantidade', updateEstoqueQuantidade);
+router.patch('/api/estoque/:sku/preco', updateEstoquePreco);
 
-// ============================================================
-// PEDIDOS (protegido)
-// ============================================================
-router.get('/pedidos', verificarToken, getPedidos);
-router.get('/pedidos/:numero', verificarToken, getPedidoDetalhe);
-router.patch('/pedidos/:numero/pagamento', verificarToken, updatePedidoPagamento);
-router.patch('/pedidos/:numero/entrega', verificarToken, updatePedidoEntrega);
-router.patch('/pedidos/:numero/endereco', verificarToken, updatePedidoEndereco);
+// PEDIDOS (5 endpoints)
+router.get('/api/pedidos', listPedidos);
+router.get('/api/pedidos/:numero', getPedidoDetail);
+router.patch('/api/pedidos/:numero/pagamento', updatePagamento);
+router.patch('/api/pedidos/:numero/entrega', updateEntrega);
+router.patch('/api/pedidos/:numero/endereco', updateEndereco);
 
-// ============================================================
-// CLIENTES (protegido)
-// ============================================================
-router.get('/clientes', verificarToken, getClientes);
-router.get('/clientes/:id', verificarToken, getClienteDetalhe);
-router.get('/clientes/:id/pedidos', verificarToken, getClientePedidos);
-router.patch('/clientes/:id', verificarToken, updateCliente);
+// CLIENTES (3 endpoints)
+router.get('/api/clientes', listClientes);
+router.get('/api/clientes/:id', getClienteDetail);
+router.get('/api/clientes/:id/pedidos', getClientePedidos);
 
-// ============================================================
-// LEADS (protegido)
-// ============================================================
-router.get('/leads', verificarToken, getLeads);
-router.patch('/leads/:id/status', verificarToken, updateLeadStatus);
-
-// ============================================================
-// SUPORTE (protegido)
-// ============================================================
-router.get('/suporte', verificarToken, getSuporte);
-router.patch('/suporte/:id/responder', verificarToken, responderSuporte);
+// LEADS (2 endpoints)
+router.get('/api/leads', listLeads);
+router.patch('/api/leads/:id/status', updateLeadStatus);
 
 export default router;
