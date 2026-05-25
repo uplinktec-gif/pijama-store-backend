@@ -1,13 +1,14 @@
 import app from './src/app.js';
 import { logger } from './src/utils/logger.js';
 import { inicializarScheduler, cancelarTodosJobs } from './src/services/scheduler/jobs.js';
+import { executarMonitor } from './src/services/monitor/evolution-monitor.js';
 import { initializeDatabase, closeDatabase, saveDatabase } from './src/config/database.js';
-import { initializeSheets } from './src/config/sheets.js';
 import { initializeClaude } from './src/config/claude.js';
 import { initializeGemini } from './src/config/gemini.js';
 import { inicializarSecretSessao } from './src/utils/sessionTokens.js';
+import { env } from './src/config/env.js';
 
-const PORT = parseInt(process.env.PORT, 10) || 5000;
+const PORT = env.port;
 
 async function iniciar() {
   // Inicializar banco de dados SQLite
@@ -16,13 +17,6 @@ async function iniciar() {
   // Inicializar Claude API
   initializeClaude();
   await initializeGemini();
-
-  // Inicializar Google Sheets (opcional - usado apenas para Google OAuth)
-  try {
-    await initializeSheets();
-  } catch (err) {
-    logger.warn('⚠️ Google Sheets não inicializado (opcional):', err.message);
-  }
 
   // Inicializar secret de sessão do cliente (Portal)
   const clienteSessionSecret = process.env.CLIENTE_SESSION_SECRET;
@@ -38,9 +32,24 @@ async function iniciar() {
   // (portas alternativas causam acúmulo de processos zumbis com scheduler ativo)
   await new Promise((resolve, reject) => {
     server = app.listen(PORT, () => {
+      const isDev = env.nodeEnv === 'development';
       logger.info(`✓ Servidor rodando em http://localhost:${PORT}`);
-      logger.info(`✓ Ambiente: ${process.env.NODE_ENV || 'development'}`);
+      logger.info(`✓ Ambiente: ${env.nodeEnv.toUpperCase()}`);
+      logger.info(`✓ Banco de dados: ${env.dbPath}`);
+
+      if (isDev) {
+        logger.warn('⚠️  Modo DESENVOLVIMENTO - CORS aberto, endpoints de teste ativados');
+      } else {
+        logger.info('🔒 Modo PRODUÇÃO - CORS restrito, segurança ativada');
+      }
+
       inicializarScheduler();
+
+      // Iniciar monitor de Evolution API em background
+      executarMonitor().catch(err => {
+        logger.error('Erro ao iniciar Evolution Monitor:', err.message);
+      });
+
       resolve();
     }).on('error', (err) => {
       logger.error(`✗ Não foi possível iniciar na porta ${PORT}: ${err.message}`);

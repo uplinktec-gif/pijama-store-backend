@@ -1,0 +1,86 @@
+import bcrypt from 'bcryptjs';
+import { queryOne, query, run } from '../config/database.js';
+import { gerarToken } from '../middleware/jwtAuth.js';
+import { logger } from '../utils/logger.js';
+
+export async function loginAdmin(req, res) {
+  try {
+    // Aceita tanto {username, password} quanto {usuario, senha}
+    const user = req.body.username || req.body.usuario;
+    const pass = req.body.password || req.body.senha;
+
+    if (!user || !pass) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Username e password são obrigatórios' 
+      });
+    }
+
+    // Buscar usuário no banco
+    const usuario = queryOne(
+      'SELECT id, username, email, senha_hash, ativo FROM admin_usuarios WHERE username = ?',
+      [user]
+    );
+
+    if (!usuario) {
+      logger.warn(`[LOGIN] Usuário não encontrado: ${user}`);
+      return res.status(401).json({ success: false, error: 'Credenciais inválidas' });
+    }
+
+    if (!usuario.ativo) {
+      logger.warn(`[LOGIN] Usuário inativo: ${user}`);
+      return res.status(403).json({ success: false, error: 'Usuário desativado' });
+    }
+
+    // Verificar senha
+    const senhaValida = await bcrypt.compare(pass, usuario.senha_hash);
+    if (!senhaValida) {
+      logger.warn(`[LOGIN] Senha incorreta: ${user}`);
+      return res.status(401).json({ success: false, error: 'Credenciais inválidas' });
+    }
+
+    // Gerar token
+    const token = gerarToken({
+      id: usuario.id,
+      username: usuario.username,
+      email: usuario.email
+    });
+
+    logger.info(`[LOGIN] ✓ Usuário autenticado: ${user}`);
+    
+    return res.json({
+      success: true,
+      token,
+      usuario: {
+        id: usuario.id,
+        username: usuario.username,
+        email: usuario.email
+      },
+      nome: usuario.username,
+      role: 'admin'
+    });
+  } catch (error) {
+    logger.error(`[LOGIN] Erro: ${error.message}`);
+    return res.status(500).json({ success: false, error: 'Erro interno do servidor' });
+  }
+}
+
+// Dashboard stats endpoint
+export function getDashboardStats(req, res) {
+  try {
+    const pedidos = query('SELECT COUNT(*) as qtd FROM pedidos');
+    const pendentes = query('SELECT COUNT(*) as qtd FROM pedidos WHERE status_entrega != "ENTREGUE"');
+    const estoque_critico = query('SELECT COUNT(*) as qtd FROM estoque WHERE quantidade_disponivel < 5');
+
+    return res.json({
+      total_usuarios: 1,
+      total_pedidos: pedidos[0]?.qtd || 0,
+      pedidos_pendentes: pendentes[0]?.qtd || 0,
+      estoque_critico: estoque_critico[0]?.qtd || 0,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    logger.error(`[STATS] Erro: ${error.message}`);
+    return res.status(500).json({ error: 'Erro ao buscar stats' });
+  }
+}

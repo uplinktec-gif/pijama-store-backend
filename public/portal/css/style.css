@@ -437,6 +437,103 @@ button:disabled {
   color: #e75480;
 }
 
+/* Product Selection Modal */
+.tamanho-selector {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.size-button {
+  flex: 1;
+  min-width: 80px;
+  padding: 12px 16px;
+  border: 2px solid #e0e0e0;
+  background: white;
+  color: #333;
+  font-weight: 600;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.size-button:hover {
+  border-color: #e75480;
+  color: #e75480;
+}
+
+.size-button.active {
+  background: linear-gradient(135deg, #e75480 0%, #d43a70 100%);
+  color: white;
+  border-color: #e75480;
+}
+
+.color-selector {
+  display: flex;
+  gap: 15px;
+  flex-wrap: wrap;
+  justify-content: center;
+  padding: 15px 0;
+}
+
+.color-button {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  border: 2px solid #ddd !important;
+  padding: 0 !important;
+}
+
+.color-button:hover {
+  transform: scale(1.1);
+  border-color: #e75480 !important;
+}
+
+.color-button.active {
+  border-color: #e75480 !important;
+  box-shadow: 0 0 0 3px rgba(231, 84, 128, 0.2);
+}
+
+.back-button {
+  background: white;
+  color: #e75480;
+  border: 2px solid #e75480;
+  width: 100%;
+}
+
+.back-button:hover {
+  background: #ffe7f1;
+}
+
+.qty-btn {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  font-size: 18px;
+  background: white;
+  border: 2px solid #e0e0e0;
+  color: #333;
+  border-radius: 6px;
+}
+
+.qty-btn:hover {
+  border-color: #e75480;
+  color: #e75480;
+}
+
+#quantidadeInput {
+  border: 2px solid #e0e0e0 !important;
+  border-radius: 6px !important;
+  font-weight: 600;
+}
+
+#quantidadeInput:focus {
+  outline: none;
+  border-color: #e75480 !important;
+}
+
 .profile-item {
   margin-bottom: 15px;
   padding-bottom: 15px;

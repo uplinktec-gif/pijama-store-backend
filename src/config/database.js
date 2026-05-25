@@ -337,6 +337,47 @@ function createTables() {
       )
     `);
 
+    // 9. ESTOQUE_VERSAO (Audit Log e Versionamento para Sincronização 3-Camadas)
+    db.run(`
+      CREATE TABLE IF NOT EXISTS estoque_versao (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        versao INTEGER NOT NULL UNIQUE,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+        operacao TEXT NOT NULL,
+        sku TEXT,
+        mudancas_json TEXT,
+        usuario_id TEXT DEFAULT 'sistema',
+        FOREIGN KEY(sku) REFERENCES estoque(sku)
+      )
+    `);
+
+    // 10. WEBHOOKS_FILA_MORTA (Dead Letter Queue para Webhooks com Falha)
+    db.run(`
+      CREATE TABLE IF NOT EXISTS webhooks_fila_morta (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        consumidor TEXT,
+        sku TEXT,
+        versao INTEGER,
+        tentativas INTEGER DEFAULT 0,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+        erro_mensagem TEXT
+      )
+    `);
+
+    // 11. WEBHOOKS_CONSUMIDORES (Registro de Consumidores/Subscribers)
+    db.run(`
+      CREATE TABLE IF NOT EXISTS webhooks_consumidores (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        consumidor TEXT NOT NULL UNIQUE,
+        url TEXT NOT NULL,
+        ativo INTEGER DEFAULT 1,
+        ultima_notificacao TEXT,
+        ultima_falha TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
     // Índices para performance
     const indices = [
       'CREATE INDEX IF NOT EXISTS idx_pedidos_whatsapp ON pedidos(cliente_whatsapp)',
@@ -352,6 +393,11 @@ function createTables() {
       'CREATE INDEX IF NOT EXISTS idx_estoque_modelo ON estoque(modelo)',
       'CREATE INDEX IF NOT EXISTS idx_estoque_status ON estoque(status)',
       'CREATE INDEX IF NOT EXISTS idx_admin_usuarios_username ON admin_usuarios(username)',
+      'CREATE INDEX IF NOT EXISTS idx_estoque_versao_timestamp ON estoque_versao(timestamp DESC)',
+      'CREATE INDEX IF NOT EXISTS idx_estoque_versao_sku ON estoque_versao(sku)',
+      'CREATE INDEX IF NOT EXISTS idx_webhooks_fila_morta_versao ON webhooks_fila_morta(versao)',
+      'CREATE INDEX IF NOT EXISTS idx_webhooks_consumidores_ativo ON webhooks_consumidores(ativo)',
+      'CREATE INDEX IF NOT EXISTS idx_webhooks_fila_morta_timestamp ON webhooks_fila_morta(timestamp)'
     ];
 
     for (const idx of indices) {
@@ -362,5 +408,98 @@ function createTables() {
   } catch (error) {
     logger.error('Erro ao criar tabelas:', error.message);
     throw error;
+  }
+}
+
+/**
+ * Obtém a próxima versão para registrar uma alteração
+ * @returns {number} Próxima versão disponível
+ */
+function obterProximaVersao() {
+  if (!db) throw new Error('Database não inicializado');
+
+  try {
+    const result = queryOne('SELECT MAX(versao) as max_versao FROM estoque_versao');
+    return (result?.max_versao ?? 0) + 1;
+  } catch (error) {
+    logger.warn('[DB] Erro ao obter próxima versão, usando 1:', error.message);
+    return 1;
+  }
+}
+
+/**
+ * Registra uma alteração ao estoque no audit log (estoque_versao)
+ * Chamado automaticamente quando estoque é INSERT/UPDATE
+ * @param {string} sku - SKU do produto
+ * @param {string} operacao - INSERT, UPDATE ou DELETE
+ * @param {object} mudancas - {campo: {de: valor_antigo, para: valor_novo}}
+ * @param {string} usuarioId - ID do usuário que fez a alteração (default: 'sistema')
+ * @returns {{success: boolean, versao: number|null}}
+ */
+export function registrarAlteracaoEstoque(sku, operacao, mudancas, usuarioId = 'sistema') {
+  if (!db) throw new Error('Database não inicializado');
+
+  try {
+    const versao = obterProximaVersao();
+    const mudancasJson = JSON.stringify(mudancas);
+
+    const result = run(`
+      INSERT INTO estoque_versao (versao, operacao, sku, mudancas_json, usuario_id)
+      VALUES (?, ?, ?, ?, ?)
+    `, [versao, operacao, sku, mudancasJson, usuarioId]);
+
+    logger.debug(`[VERSIONING] Estoque v${versao}: ${operacao} ${sku} por ${usuarioId}`);
+
+    return { success: result.success, versao };
+  } catch (error) {
+    logger.error('[VERSIONING] Erro ao registrar alteração:', error.message);
+    return { success: false, versao: null };
+  }
+}
+
+/**
+ * Obtém o histórico de alterações de estoque desde uma versão
+ * @param {number} desdeVersao - Versão mínima (null para todas)
+ * @param {number} limite - Número máximo de registros (default: 100)
+ * @returns {{versao_atual: number, alteracoes: Array}}
+ */
+export function obterHistoricoEstoque(desdeVersao = null, limite = 100) {
+  if (!db) throw new Error('Database não inicializado');
+
+  try {
+    // Obter versão atual
+    const maxResult = queryOne('SELECT MAX(versao) as versao_atual FROM estoque_versao');
+    const versaoAtual = maxResult?.versao_atual ?? 0;
+
+    // Montar query com filtro opcional
+    let sql = 'SELECT * FROM estoque_versao';
+    const params = [];
+
+    if (desdeVersao !== null) {
+      sql += ' WHERE versao >= ?';
+      params.push(desdeVersao);
+    }
+
+    sql += ' ORDER BY versao DESC LIMIT ?';
+    params.push(limite);
+
+    const alteracoes = query(sql, params)
+      .map(row => ({
+        versao: row.versao,
+        timestamp: row.timestamp,
+        sku: row.sku,
+        operacao: row.operacao,
+        mudancas: row.mudancas_json ? JSON.parse(row.mudancas_json) : null,
+        usuario_id: row.usuario_id
+      }))
+      .reverse(); // Ordenar por versão crescente para histórico
+
+    return {
+      versao_atual: versaoAtual,
+      alteracoes
+    };
+  } catch (error) {
+    logger.error('[VERSIONING] Erro ao obter histórico:', error.message);
+    return { versao_atual: 0, alteracoes: [] };
   }
 }

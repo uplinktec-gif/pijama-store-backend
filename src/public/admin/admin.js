@@ -20,9 +20,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   setupEventListeners();
   await loadDashboard();
-
-  // Conecta ao SSE para atualizações de estoque em tempo real
-  conectarSSEAdminEstoque();
 });
 
 // ========================================
@@ -615,119 +612,7 @@ function debounce(fn, delay) {
   };
 }
 
-// ========================================
-// SSE - REAL-TIME ESTOQUE UPDATES
-// ========================================
-
-function conectarSSEAdminEstoque() {
-  try {
-    // Cria conexão EventSource com o servidor
-    const eventSource = new EventSource('/api/sse/estoque');
-
-    // Listener para evento de conexão estabelecida
-    eventSource.addEventListener('open', () => {
-      console.log('✓ Conexão SSE estabelecida com sucesso no Admin');
-    });
-
-    // Listener para eventos de estoque atualizado
-    eventSource.addEventListener('data', (event) => {
-      try {
-        const msg = JSON.parse(event.data);
-
-        // Ignorar evento de conexão inicial
-        if (msg.tipo === 'conectado') {
-          console.log('✓ SSE pronto para atualizações:', msg.mensagem);
-          return;
-        }
-
-        // Processar evento de estoque atualizado
-        if (msg.tipo === 'estoque-atualizado') {
-          console.log('🔄 Estoque atualizado:', msg.dados.sku);
-
-          // Mostrar toast de notificação
-          mostrarToast(
-            `Estoque atualizado: ${msg.dados.sku}`,
-            'info'
-          );
-
-          // Se estamos na seção de estoque, recarregar
-          if (currentSection === 'estoque') {
-            console.log('Recarregando lista de estoque...');
-            loadEstoque();
-          }
-
-          // Se estamos na seção de dashboard, recarregar stats
-          if (currentSection === 'dashboard') {
-            console.log('Atualizando dashboard...');
-            loadDashboard();
-          }
-        }
-
-        // Processar novo item criado
-        if (msg.tipo === 'estoque-criado') {
-          console.log('✨ Novo item de estoque:', msg.dados.sku);
-          mostrarToast(
-            `Novo produto: ${msg.dados.sku}`,
-            'success'
-          );
-
-          if (currentSection === 'estoque') {
-            loadEstoque();
-          }
-        }
-
-        // Processar item deletado
-        if (msg.tipo === 'estoque-deletado') {
-          console.log('❌ Item deletado:', msg.dados.sku);
-          mostrarToast(
-            `Produto removido: ${msg.dados.sku}`,
-            'warning'
-          );
-
-          if (currentSection === 'estoque') {
-            loadEstoque();
-          }
-        }
-
-      } catch (erro) {
-        console.warn('⚠️ Erro ao processar evento SSE:', erro.message);
-      }
-    });
-
-    // Listener para erros na conexão
-    eventSource.addEventListener('error', (erro) => {
-      console.error('❌ Erro na conexão SSE:', erro);
-      mostrarToast(
-        'Conexão SSE perdida. Tentando reconectar...',
-        'error'
-      );
-
-      // Tenta reconectar em 5 segundos
-      setTimeout(() => {
-        console.log('🔄 Tentando reconectar ao SSE...');
-        eventSource.close();
-        conectarSSEAdminEstoque();
-      }, 5000);
-    });
-
-    // Armazena referência global para poder fechar depois
-    window.sseAdminConnection = eventSource;
-
-    console.log('✓ SSE listener registrado para Admin Panel');
-
-  } catch (erro) {
-    console.error('Erro ao conectar SSE no Admin:', erro);
-    mostrarToast('Erro ao conectar ao sistema de notificações em tempo real', 'error');
-  }
-}
-
 function logout() {
   localStorage.removeItem('adminToken');
-
-  // Fechar conexão SSE se estiver aberta
-  if (window.sseAdminConnection) {
-    window.sseAdminConnection.close();
-  }
-
   window.location.href = '/admin/login.html';
 }

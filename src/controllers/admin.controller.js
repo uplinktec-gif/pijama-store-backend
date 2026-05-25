@@ -1,7 +1,8 @@
-import { query, queryOne, run } from '../config/database.js';
+import { query, queryOne, run, obterHistoricoEstoque, registrarAlteracaoEstoque } from '../config/database.js';
 import { logger } from '../utils/logger.js';
 import { generateSKU } from '../services/sqlite/estoque.js';
-import { gerarToken } from '../middleware/authAdmin.js';
+import { notificarConsumidores } from '../services/webhooks/estoque.webhooks.js';
+import { gerarToken } from '../middleware/jwtAuth.js';
 import bcrypt from 'bcryptjs';
 
 // ---------------------------------------------------------------------------
@@ -229,20 +230,37 @@ export async function updateEstoqueQuantidade(req, res) {
     const now = new Date().toISOString();
     const novaQtd = parseInt(quantidade_total);
 
-    // Verificar que não é menor que a reservada
-    const item = queryOne('SELECT * FROM estoque WHERE sku = ?', [sku]);
+    // Verificar que não é menor que a reservada (normalizar SKU para maiúsculas)
+    const skuNormalizado = sku.toUpperCase();
+    const item = queryOne('SELECT * FROM estoque WHERE UPPER(sku) = ?', [skuNormalizado]);
     if (!item) return res.status(404).json({ error: 'SKU não encontrado' });
 
     if (novaQtd < parseInt(item.quantidade_reservada || 0)) {
       return res.status(400).json({ error: `Não pode ser menor que a quantidade reservada (${item.quantidade_reservada})` });
     }
 
+    // Registrar mudança para auditoria
+    const mudancas = {
+      quantidade_total: { de: item.quantidade_total, para: novaQtd }
+    };
+    const versionamento = registrarAlteracaoEstoque(item.sku, 'UPDATE', mudancas, req.user?.id || 'admin');
+
+    // Atualizar estoque
     run(
-      'UPDATE estoque SET quantidade_total = ?, quantidade_disponivel = ? - quantidade_reservada, data_atualizacao = ?, updated_at = ? WHERE sku = ?',
-      [novaQtd, novaQtd, now, now, sku]
+      'UPDATE estoque SET quantidade_total = ?, quantidade_disponivel = ? - quantidade_reservada, data_atualizacao = ?, updated_at = ? WHERE UPPER(sku) = ?',
+      [novaQtd, novaQtd, now, now, skuNormalizado]
     );
 
-    res.json({ success: true, sku, quantidade_total: novaQtd });
+    // Notificar consumidores via webhooks
+    if (versionamento.success) {
+      await notificarConsumidores(item.sku, versionamento.versao, {
+        operacao: 'UPDATE',
+        mudancas,
+        usuario_id: req.user?.id || 'admin'
+      }).catch(err => logger.error('[webhooks] Erro ao notificar:', err.message));
+    }
+
+    res.json({ success: true, sku: item.sku, quantidade_total: novaQtd, versao: versionamento.versao });
   } catch (error) {
     logger.error('[admin] updateEstoqueQuantidade:', error.message);
     res.status(500).json({ error: error.message });
@@ -259,10 +277,33 @@ export async function updateEstoquePreco(req, res) {
     }
 
     const now = new Date().toISOString();
-    run('UPDATE estoque SET preco_unitario = ?, updated_at = ? WHERE sku = ?',
-      [parseFloat(preco_unitario), now, sku]);
+    const skuNormalizado = sku.toUpperCase();
+    const novoPreco = parseFloat(preco_unitario);
 
-    res.json({ success: true });
+    // Buscar item atual para registrar mudança
+    const item = queryOne('SELECT * FROM estoque WHERE UPPER(sku) = ?', [skuNormalizado]);
+    if (!item) return res.status(404).json({ error: 'SKU não encontrado' });
+
+    // Registrar mudança para auditoria
+    const mudancas = {
+      preco_unitario: { de: item.preco_unitario, para: novoPreco }
+    };
+    const versionamento = registrarAlteracaoEstoque(item.sku, 'UPDATE', mudancas, req.user?.id || 'admin');
+
+    // Atualizar estoque
+    run('UPDATE estoque SET preco_unitario = ?, updated_at = ? WHERE UPPER(sku) = ?',
+      [novoPreco, now, skuNormalizado]);
+
+    // Notificar consumidores via webhooks
+    if (versionamento.success) {
+      await notificarConsumidores(item.sku, versionamento.versao, {
+        operacao: 'UPDATE',
+        mudancas,
+        usuario_id: req.user?.id || 'admin'
+      }).catch(err => logger.error('[webhooks] Erro ao notificar:', err.message));
+    }
+
+    res.json({ success: true, versao: versionamento.versao });
   } catch (error) {
     logger.error('[admin] updateEstoquePreco:', error.message);
     res.status(500).json({ error: error.message });
@@ -285,16 +326,57 @@ export async function createEstoqueItem(req, res) {
 
     const now = new Date().toISOString();
     const qtd = parseInt(quantidade_total) || 0;
+    const preco = parseFloat(preco_unitario) || 0;
 
+    // Registrar novo item (INSERT)
+    const mudancas = {
+      modelo: { de: null, para: modelo.toUpperCase() },
+      tamanho: { de: null, para: tamanho.toUpperCase() },
+      cor: { de: null, para: cor.toLowerCase() },
+      preco_unitario: { de: null, para: preco },
+      quantidade_total: { de: null, para: qtd }
+    };
+    const versionamento = registrarAlteracaoEstoque(sku, 'INSERT', mudancas, req.user?.id || 'admin');
+
+    // Inserir estoque
     run(
       `INSERT INTO estoque (sku, modelo, tamanho, cor, preco_unitario, quantidade_total, quantidade_reservada, quantidade_disponivel, data_atualizacao, status)
        VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, 'ATIVO')`,
-      [sku, modelo.toUpperCase(), tamanho.toUpperCase(), cor.toLowerCase(), parseFloat(preco_unitario) || 0, qtd, qtd, now]
+      [sku, modelo.toUpperCase(), tamanho.toUpperCase(), cor.toLowerCase(), preco, qtd, qtd, now]
     );
 
-    res.status(201).json({ success: true, sku });
+    // Notificar consumidores via webhooks
+    if (versionamento.success) {
+      await notificarConsumidores(sku, versionamento.versao, {
+        operacao: 'INSERT',
+        mudancas,
+        usuario_id: req.user?.id || 'admin'
+      }).catch(err => logger.error('[webhooks] Erro ao notificar:', err.message));
+    }
+
+    res.status(201).json({ success: true, sku, versao: versionamento.versao });
   } catch (error) {
     logger.error('[admin] createEstoqueItem:', error.message);
+    res.status(500).json({ error: error.message });
+  }
+}
+
+/**
+ * Retorna o histórico de alterações de estoque (audit log)
+ * GET /admin/api/estoque/historico?desde_versao=X&limite=100
+ */
+export async function getEstoqueHistorico(req, res) {
+  try {
+    const { desde_versao, limite = 100 } = req.query;
+
+    const desdeVersao = desde_versao ? parseInt(desde_versao) : null;
+    const limiteNum = Math.min(parseInt(limite) || 100, 500); // Máximo 500
+
+    const resultado = obterHistoricoEstoque(desdeVersao, limiteNum);
+
+    res.json(resultado);
+  } catch (error) {
+    logger.error('[admin] getEstoqueHistorico:', error.message);
     res.status(500).json({ error: error.message });
   }
 }

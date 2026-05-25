@@ -6,6 +6,7 @@ import * as estoqueSheets from '../sqlite/estoque.js';
 import { gerarRecomendacaoCliente } from '../business/recomendacoes.js';
 import * as clientesSheets from '../sqlite/clientes.js';
 import { realizarBackup } from '../backup/backupSQLite.js';
+import { sincronizarComVPS, verificarSSHConfigurado } from '../sync/syncToVPS.js';
 import { obterRoleUsuario, temPermissao } from '../../config/users.js';
 
 // Números de telefone autorizados (Felipe e Júlly)
@@ -14,6 +15,27 @@ const NUMERO_JULLY = process.env.NUMERO_JULLY || '+5595987654321';
 
 // Set para rastrear jobs já agendados (evitar duplicação)
 const jobsAgendados = new Set();
+
+/**
+ * Agenda sincronização com VPS a cada 30 minutos
+ */
+function agendarSincronizacaoVPS() {
+  const job = schedule.scheduleJob('*/30 * * * *' /* a cada 30 min */, async () => {
+    try {
+      const resultado = await sincronizarComVPS();
+
+      if (resultado.success) {
+        logger.info(`✅ [SYNC-AUTO] Banco sincronizado com VPS (${resultado.localSize} bytes)`);
+      } else {
+        logger.warn(`⚠️  [SYNC-AUTO] Falha na sincronização: ${resultado.error}`);
+      }
+    } catch (error) {
+      logger.error('[SYNC-AUTO] Erro ao sincronizar:', error.message);
+    }
+  });
+
+  return job;
+}
 
 /**
  * Agenda relatório diário às 18h para Felipe
@@ -318,6 +340,15 @@ function inicializarScheduler() {
     }
 
     const jobs = [];
+
+    // Agendar sincronização com VPS a cada 30 minutos
+    if (!jobsAgendados.has('sync-vps')) {
+      jobs.push({
+        nome: 'Sincronização com VPS (30 min)',
+        job: agendarSincronizacaoVPS()
+      });
+      jobsAgendados.add('sync-vps');
+    }
 
     // Agendar relatório diário às 18h
     if (!jobsAgendados.has('relatorio-diario')) {

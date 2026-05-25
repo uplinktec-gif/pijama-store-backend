@@ -1,57 +1,81 @@
 import express from 'express';
-import { autenticarAdmin as adminAuth } from '../middleware/authAdmin.js';
-import * as adminCtrl from '../controllers/admin.controller.js';
+import { verificarToken } from '../middleware/jwtAuth.js';
+import { adminLogin } from '../controllers/admin.controller.js';
+import {
+  getDashboardStats,
+  // Estoque
+  getEstoque,
+  updateEstoqueQuantidade,
+  updateEstoquePreco,
+  createEstoqueItem,
+  getEstoqueHistorico,
+  // Pedidos
+  getPedidos,
+  getPedidoDetalhe,
+  updatePedidoPagamento,
+  updatePedidoEntrega,
+  updatePedidoEndereco,
+  // Clientes
+  getClientes,
+  getClienteDetalhe,
+  getClientePedidos,
+  updateCliente,
+  // Leads
+  getLeads,
+  updateLeadStatus,
+  // Suporte
+  getSuporte,
+  responderSuporte
+} from '../controllers/admin.controller.js';
 
 const router = express.Router();
 
-// ---------------------------------------------------------------------------
-// AUTH — rota pública (sem token, sem IP whitelist)
-// ---------------------------------------------------------------------------
-router.post('/auth/login', adminCtrl.adminLogin);
+// ============================================================
+// AUTENTICAÇÃO (pública)
+// ============================================================
+router.post('/auth/login', adminLogin);
 
-// Proteger todas as outras rotas com JWT
-router.use(adminAuth);
+// ============================================================
+// DASHBOARD (protegido)
+// ============================================================
+router.get('/stats', verificarToken, getDashboardStats);
 
-// ---------------------------------------------------------------------------
-// DASHBOARD
-// ---------------------------------------------------------------------------
-router.get('/stats', adminCtrl.getDashboardStats);
+// ============================================================
+// ESTOQUE (protegido)
+// ============================================================
+router.get('/estoque', verificarToken, getEstoque);
+router.get('/estoque/historico', verificarToken, getEstoqueHistorico);
+router.post('/estoque', verificarToken, createEstoqueItem);
+router.patch('/estoque/:sku/quantidade', verificarToken, updateEstoqueQuantidade);
+router.patch('/estoque/:sku/preco', verificarToken, updateEstoquePreco);
 
-// ---------------------------------------------------------------------------
-// ESTOQUE
-// ---------------------------------------------------------------------------
-router.get('/estoque', adminCtrl.getEstoque);
-router.post('/estoque', adminCtrl.createEstoqueItem);
-router.patch('/estoque/:sku/quantidade', adminCtrl.updateEstoqueQuantidade);
-router.patch('/estoque/:sku/preco', adminCtrl.updateEstoquePreco);
+// ============================================================
+// PEDIDOS (protegido)
+// ============================================================
+router.get('/pedidos', verificarToken, getPedidos);
+router.get('/pedidos/:numero', verificarToken, getPedidoDetalhe);
+router.patch('/pedidos/:numero/pagamento', verificarToken, updatePedidoPagamento);
+router.patch('/pedidos/:numero/entrega', verificarToken, updatePedidoEntrega);
+router.patch('/pedidos/:numero/endereco', verificarToken, updatePedidoEndereco);
 
-// ---------------------------------------------------------------------------
-// PEDIDOS
-// ---------------------------------------------------------------------------
-router.get('/pedidos', adminCtrl.getPedidos);
-router.get('/pedidos/:numero', adminCtrl.getPedidoDetalhe);
-router.patch('/pedidos/:numero/pagamento', adminCtrl.updatePedidoPagamento);
-router.patch('/pedidos/:numero/entrega', adminCtrl.updatePedidoEntrega);
-router.patch('/pedidos/:numero/endereco', adminCtrl.updatePedidoEndereco);
+// ============================================================
+// CLIENTES (protegido)
+// ============================================================
+router.get('/clientes', verificarToken, getClientes);
+router.get('/clientes/:id', verificarToken, getClienteDetalhe);
+router.get('/clientes/:id/pedidos', verificarToken, getClientePedidos);
+router.patch('/clientes/:id', verificarToken, updateCliente);
 
-// ---------------------------------------------------------------------------
-// CLIENTES
-// ---------------------------------------------------------------------------
-router.get('/clientes', adminCtrl.getClientes);
-router.get('/clientes/:id', adminCtrl.getClienteDetalhe);
-router.get('/clientes/:id/pedidos', adminCtrl.getClientePedidos);
-router.patch('/clientes/:id', adminCtrl.updateCliente);
+// ============================================================
+// LEADS (protegido)
+// ============================================================
+router.get('/leads', verificarToken, getLeads);
+router.patch('/leads/:id/status', verificarToken, updateLeadStatus);
 
-// ---------------------------------------------------------------------------
-// LEADS
-// ---------------------------------------------------------------------------
-router.get('/leads', adminCtrl.getLeads);
-router.patch('/leads/:id/status', adminCtrl.updateLeadStatus);
-
-// ---------------------------------------------------------------------------
-// SUPORTE
-// ---------------------------------------------------------------------------
-router.get('/suporte', adminCtrl.getSuporte);
-router.patch('/suporte/:id/responder', adminCtrl.responderSuporte);
+// ============================================================
+// SUPORTE (protegido)
+// ============================================================
+router.get('/suporte', verificarToken, getSuporte);
+router.patch('/suporte/:id/responder', verificarToken, responderSuporte);
 
 export default router;

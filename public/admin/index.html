@@ -1,280 +1,259 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Pluma Admin</title>
+  <title>Admin Pijama Store</title>
   <link rel="stylesheet" href="admin.css">
 </head>
 <body>
+  <div class="admin-container">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <h1 class="logo">📊 Admin</h1>
+        <button class="mobile-toggle" id="mobileToggle">☰</button>
+      </div>
 
-  <!-- LOGIN MODAL -->
-  <div id="login-modal" class="modal-fullscreen">
-    <div class="login-container">
-      <div class="login-box">
-        <div class="login-header">
-          <div style="font-size: 48px; margin-bottom: 20px;">🌙</div>
-          <h1>Pluma Admin</h1>
-          <p>Painel de Gestão</p>
+      <nav class="sidebar-nav">
+        <a href="#dashboard" class="nav-link active" data-section="dashboard">
+          <span class="icon">📈</span>
+          <span class="label">Dashboard</span>
+        </a>
+        <a href="#estoque" class="nav-link" data-section="estoque">
+          <span class="icon">📦</span>
+          <span class="label">Estoque</span>
+        </a>
+        <a href="#pedidos" class="nav-link" data-section="pedidos">
+          <span class="icon">📋</span>
+          <span class="label">Pedidos</span>
+        </a>
+        <a href="#clientes" class="nav-link" data-section="clientes">
+          <span class="icon">👥</span>
+          <span class="label">Clientes</span>
+        </a>
+        <a href="#leads" class="nav-link" data-section="leads">
+          <span class="icon">🎯</span>
+          <span class="label">Leads</span>
+        </a>
+        <a href="#suporte" class="nav-link" data-section="suporte">
+          <span class="icon">💬</span>
+          <span class="label">Suporte</span>
+        </a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <button id="logoutBtn" class="logout-btn">Sair</button>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <div class="content-header">
+        <h2 id="sectionTitle">Dashboard</h2>
+        <div class="header-actions">
+          <input type="text" id="searchInput" class="search-box" placeholder="Buscar..." style="display: none;">
+          <span id="userInfo" class="user-info"></span>
         </div>
+      </div>
 
-        <form id="login-form">
-          <div class="form-group">
-            <label for="login-usuario">Usuário</label>
-            <input
-              type="text"
-              id="login-usuario"
-              placeholder="felipe, jully ou pluma"
-              required
-              autofocus
-            >
+      <!-- Dashboard Section -->
+      <section id="dashboard-section" class="section active">
+        <div class="cards-grid" id="dashboardCards">
+          <!-- Cards populated by JavaScript -->
+        </div>
+        <div class="chart-container">
+          <h3>Vendas - Últimos 7 Dias</h3>
+          <div id="chartArea"></div>
+        </div>
+      </section>
+
+      <!-- Estoque Section -->
+      <section id="estoque-section" class="section">
+        <div class="section-toolbar">
+          <button id="addEstoqueBtn" class="btn btn-primary">➕ Novo Item</button>
+          <input type="text" id="estoqueSearch" class="search-box" placeholder="Buscar modelo...">
+        </div>
+        <div class="table-responsive">
+          <table id="estoqueTable" class="data-table">
+            <thead>
+              <tr>
+                <th>SKU</th>
+                <th>Modelo</th>
+                <th>Tamanho</th>
+                <th>Cor</th>
+                <th>Preço</th>
+                <th>Disponível</th>
+                <th>Total</th>
+                <th>Status</th>
+                <th>Ações</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Pedidos Section -->
+      <section id="pedidos-section" class="section">
+        <div class="section-toolbar">
+          <div class="filters">
+            <select id="pedidoStatusFilter" class="select-box">
+              <option value="">Todos os Status</option>
+              <option value="PENDENTE">Pendente</option>
+              <option value="PAGO">Pago</option>
+              <option value="CANCELADO">Cancelado</option>
+            </select>
+            <select id="pedidoEntregaFilter" class="select-box">
+              <option value="">Todos os Pedidos</option>
+              <option value="PENDENTE">Pendente Entrega</option>
+              <option value="ENTREGUE">Entregue</option>
+              <option value="RETIRADA_NA_LOJA">Retirada na Loja</option>
+            </select>
           </div>
-
-          <div class="form-group">
-            <label for="login-senha">Senha</label>
-            <input
-              type="password"
-              id="login-senha"
-              placeholder="Digite sua senha"
-              required
-            >
-          </div>
-
-          <button type="submit" class="btn btn-primary btn-block">
-            Entrar
-          </button>
-        </form>
-
-        <p style="text-align: center; margin-top: 20px; font-size: 12px; color: #666;">
-          Credenciais padrão:<br>
-          Felipe: pijama2025 | Jully/Pluma: jully2025/pluma2025
-        </p>
-      </div>
-    </div>
-  </div>
-
-  <!-- Sidebar -->
-  <nav id="sidebar" class="hidden">
-    <div class="sidebar-header">
-      <div class="logo">🌙 Pluma</div>
-      <div class="logo-sub">Painel Admin</div>
-    </div>
-    <ul class="nav-links">
-      <li><a href="#" class="nav-link active" data-section="dashboard">📊 Dashboard</a></li>
-      <li><a href="#" class="nav-link" data-section="pedidos">📋 Pedidos</a></li>
-      <li><a href="#" class="nav-link" data-section="estoque">📦 Estoque</a></li>
-      <li><a href="#" class="nav-link" data-section="clientes">👥 Clientes</a></li>
-      <li><a href="#" class="nav-link" data-section="leads">🎯 Leads</a></li>
-      <li><a href="#" class="nav-link" data-section="suporte">💬 Suporte</a></li>
-    </ul>
-    <div class="sidebar-footer">
-      <small id="last-update"></small>
-      <button id="logout-btn" class="btn btn-sm btn-logout hidden" style="width: 100%; margin-top: 15px;">
-        🚪 Logout
-      </button>
-    </div>
-  </nav>
-
-  <!-- Hamburger para mobile -->
-  <button id="menu-toggle" class="hidden">☰</button>
-
-  <!-- Conteúdo Principal -->
-  <main id="content" class="hidden">
-
-    <!-- DASHBOARD -->
-    <section id="section-dashboard" class="section">
-      <div class="section-header">
-        <h1>Dashboard</h1>
-        <button class="btn btn-sm" onclick="loadDashboard()">🔄 Atualizar</button>
-      </div>
-
-      <div id="dashboard-cards" class="cards-grid">
-        <div class="card skeleton"></div>
-        <div class="card skeleton"></div>
-        <div class="card skeleton"></div>
-        <div class="card skeleton"></div>
-      </div>
-
-      <div class="row-2col">
-        <div class="card">
-          <div class="card-title">📈 Vendas — Últimos 7 Dias</div>
-          <div id="bar-chart" class="bar-chart"></div>
+          <input type="text" id="pedidoSearch" class="search-box" placeholder="Buscar cliente ou pedido...">
         </div>
-        <div class="card">
-          <div class="card-title">📋 Últimos Pedidos</div>
-          <div id="ultimos-pedidos"></div>
+        <div class="table-responsive">
+          <table id="pedidosTable" class="data-table">
+            <thead>
+              <tr>
+                <th>#Pedido</th>
+                <th>Cliente</th>
+                <th>WhatsApp</th>
+                <th>Total</th>
+                <th>Pagamento</th>
+                <th>Entrega</th>
+                <th>Data</th>
+                <th>Ações</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
         </div>
-      </div>
-    </section>
+      </section>
 
-    <!-- PEDIDOS -->
-    <section id="section-pedidos" class="section hidden">
-      <div class="section-header">
-        <h1>Pedidos</h1>
-      </div>
-      <div class="filtros">
-        <input type="text" id="pedido-busca" placeholder="🔍 Buscar por cliente..." onkeyup="debounceCarregarPedidos()">
-        <select id="pedido-status-pgto" onchange="carregarPedidos()">
-          <option value="">Pagamento: Todos</option>
-          <option value="PEDIDO">⏳ Aguardando</option>
-          <option value="PAGO">✅ Pago</option>
-        </select>
-        <select id="pedido-status-entrega" onchange="carregarPedidos()">
-          <option value="">Entrega: Todos</option>
-          <option value="PENDENTE">📦 Pendente</option>
-          <option value="EM_TRANSITO">🚚 Em Trânsito</option>
-          <option value="ENTREGUE">✅ Entregue</option>
-          <option value="RETIRADA_NA_LOJA">🏪 Retirada</option>
-        </select>
-      </div>
-      <div id="pedidos-table-container">
-        <table class="table" id="pedidos-table">
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Data</th>
-              <th>Cliente</th>
-              <th>Itens</th>
-              <th>Total</th>
-              <th>Pagamento</th>
-              <th>Entrega</th>
-              <th>Ações</th>
-            </tr>
-          </thead>
-          <tbody id="pedidos-tbody"></tbody>
-        </table>
-      </div>
-      <div id="pedidos-paginacao" class="paginacao"></div>
-    </section>
-
-    <!-- ESTOQUE -->
-    <section id="section-estoque" class="section hidden">
-      <div class="section-header">
-        <h1>Estoque</h1>
-        <div>
-          <label><input type="checkbox" id="estoque-critico-only" onchange="carregarEstoque()"> Apenas crítico (≤3)</label>
+      <!-- Clientes Section -->
+      <section id="clientes-section" class="section">
+        <div class="section-toolbar">
+          <input type="text" id="clienteSearch" class="search-box" placeholder="Buscar cliente...">
         </div>
-      </div>
-      <div class="filtros">
-        <select id="estoque-modelo-filter" onchange="carregarEstoque()">
-          <option value="">Todos os modelos</option>
-          <option>ZARA</option><option>MIA</option><option>LIA</option>
-          <option>NÚBIA</option><option>LÍVIA</option><option>BEATRIZ</option><option>ANNE</option>
-        </select>
-      </div>
-      <table class="table" id="estoque-table">
-        <thead>
-          <tr>
-            <th>Modelo</th>
-            <th>Tam</th>
-            <th>Cor</th>
-            <th>Disponível</th>
-            <th>Reservado</th>
-            <th>Total</th>
-            <th>Preço</th>
-            <th>Status</th>
-            <th>Editar</th>
-          </tr>
-        </thead>
-        <tbody id="estoque-tbody"></tbody>
-      </table>
-    </section>
+        <div class="table-responsive">
+          <table id="clientesTable" class="data-table">
+            <thead>
+              <tr>
+                <th>Nome</th>
+                <th>WhatsApp</th>
+                <th>Email</th>
+                <th>Total Gasto</th>
+                <th>Pedidos</th>
+                <th>Cadastro</th>
+                <th>Ações</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
 
-    <!-- CLIENTES -->
-    <section id="section-clientes" class="section hidden">
-      <div class="section-header">
-        <h1>Clientes</h1>
-      </div>
-      <div class="filtros">
-        <input type="text" id="cliente-busca" placeholder="🔍 Buscar por nome ou WhatsApp..." oninput="debounceCarregarClientes()">
-      </div>
-      <table class="table">
-        <thead>
-          <tr>
-            <th>Nome</th>
-            <th>WhatsApp</th>
-            <th>Total Gasto</th>
-            <th>Pedidos</th>
-            <th>Última Compra</th>
-            <th>VIP</th>
-            <th>Ações</th>
-          </tr>
-        </thead>
-        <tbody id="clientes-tbody"></tbody>
-      </table>
-      <div id="clientes-paginacao" class="paginacao"></div>
-    </section>
-
-    <!-- LEADS -->
-    <section id="section-leads" class="section hidden">
-      <div class="section-header">
-        <h1>Leads</h1>
-      </div>
-      <div class="filtros">
-        <select id="leads-status-filter" onchange="carregarLeads()">
-          <option value="">Todos</option>
-          <option value="novo">🆕 Novo</option>
-          <option value="visitante">👁️ Visitante</option>
-          <option value="cliente">🛍️ Cliente</option>
-          <option value="vip">⭐ VIP</option>
-        </select>
-      </div>
-      <table class="table">
-        <thead>
-          <tr>
-            <th>Nome</th>
-            <th>Celular</th>
-            <th>Status</th>
-            <th>Total Gasto</th>
-            <th>Última Interação</th>
-            <th>Fonte</th>
-            <th>Ações</th>
-          </tr>
-        </thead>
-        <tbody id="leads-tbody"></tbody>
-      </table>
-    </section>
-
-    <!-- SUPORTE -->
-    <section id="section-suporte" class="section hidden">
-      <div class="section-header">
-        <h1>Suporte</h1>
-        <div>
-          <select id="suporte-status-filter" onchange="carregarSuporte()">
-            <option value="ABERTO">Abertos</option>
-            <option value="RESPONDIDO">Respondidos</option>
+      <!-- Leads Section -->
+      <section id="leads-section" class="section">
+        <div class="section-toolbar">
+          <select id="leadStatusFilter" class="select-box">
+            <option value="">Todos os Status</option>
+            <option value="novo">Novo</option>
+            <option value="contatado">Contatado</option>
+            <option value="interessado">Interessado</option>
+            <option value="cliente">Cliente</option>
+            <option value="vip">VIP</option>
           </select>
         </div>
-      </div>
-      <div id="suporte-lista"></div>
-    </section>
+        <div class="table-responsive">
+          <table id="leadsTable" class="data-table">
+            <thead>
+              <tr>
+                <th>Nome</th>
+                <th>Celular</th>
+                <th>Email</th>
+                <th>Fonte</th>
+                <th>Status</th>
+                <th>Total Gasto</th>
+                <th>Ações</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
 
-  </main>
+      <!-- Suporte Section -->
+      <section id="suporte-section" class="section">
+        <div class="section-toolbar">
+          <select id="suporteStatusFilter" class="select-box">
+            <option value="">Todos</option>
+            <option value="ABERTO">Aberto</option>
+            <option value="RESPONDIDO">Respondido</option>
+            <option value="FECHADO">Fechado</option>
+          </select>
+        </div>
+        <div class="table-responsive">
+          <table id="suporteTable" class="data-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Cliente</th>
+                <th>Assunto</th>
+                <th>Mensagem</th>
+                <th>Status</th>
+                <th>Data</th>
+                <th>Ações</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
 
-  <!-- Modal Pedido -->
-  <div id="modal-pedido" class="modal hidden">
+  <!-- Modals -->
+  <div id="pedidoModal" class="modal">
     <div class="modal-content">
-      <div class="modal-header">
-        <h2 id="modal-pedido-titulo">Detalhes do Pedido</h2>
-        <button class="modal-close" onclick="fecharModalPedido()">✕</button>
+      <span class="modal-close">&times;</span>
+      <h2>Detalhes do Pedido</h2>
+      <div id="pedidoDetail"></div>
+      <div class="modal-actions">
+        <button id="marcarPagoBtn" class="btn btn-success">Marcar como Pago</button>
+        <button id="marcarEntregueBtn" class="btn btn-success">Marcar como Entregue</button>
+        <button id="fecharPedidoModal" class="btn btn-secondary">Fechar</button>
       </div>
-      <div id="modal-pedido-body"></div>
     </div>
   </div>
 
-  <!-- Modal Cliente -->
-  <div id="modal-cliente" class="modal hidden">
-    <div class="modal-content modal-wide">
-      <div class="modal-header">
-        <h2 id="modal-cliente-titulo">Histórico do Cliente</h2>
-        <button class="modal-close" onclick="fecharModalCliente()">✕</button>
+  <div id="clienteModal" class="modal">
+    <div class="modal-content">
+      <span class="modal-close">&times;</span>
+      <h2>Detalhes do Cliente</h2>
+      <div id="clienteDetail"></div>
+      <div class="modal-actions">
+        <button id="fecharClienteModal" class="btn btn-secondary">Fechar</button>
       </div>
-      <div id="modal-cliente-body"></div>
     </div>
   </div>
 
-  <!-- Toast -->
-  <div id="toast-container"></div>
+  <div id="suporteModal" class="modal">
+    <div class="modal-content">
+      <span class="modal-close">&times;</span>
+      <h2>Responder Suporte</h2>
+      <div id="suporteDetail"></div>
+      <textarea id="suporteResponse" placeholder="Digite sua resposta..." class="textarea"></textarea>
+      <div class="modal-actions">
+        <button id="enviarRespostaBtn" class="btn btn-primary">Enviar Resposta</button>
+        <button id="fecharSuporteModal" class="btn btn-secondary">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
 
   <script src="admin.js"></script>
 </body>

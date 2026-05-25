@@ -18,7 +18,7 @@ if (missingVars.length > 0) {
 const env = {
   // App
   nodeEnv: process.env.NODE_ENV || 'development',
-  port: process.env.PORT || 3000,
+  port: process.env.PORT || 5000,
   logLevel: process.env.LOG_LEVEL || 'info',
 
   // Evolution API (WhatsApp)

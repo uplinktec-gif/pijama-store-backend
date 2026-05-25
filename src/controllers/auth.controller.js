@@ -1,203 +1,56 @@
-﻿import jwt from 'jsonwebtoken';
-import * as clientesService from '../services/sqlite/clientes.js';
-import * as leadsService from '../services/sqlite/leads.js';
+import jwt from 'jsonwebtoken';
+import { v4 as uuidv4 } from 'uuid';
+import { queryOne, query, run } from '../config/database.js';
 import { validarCPF, normalizarCelular } from '../middleware/authMiddleware.js';
 import { logger } from '../utils/logger.js';
-import { enviarMensagem } from '../services/whatsapp/sender.js';
-import { query } from '../config/database.js';
-
-/**
- * Envia notificação para Felipe quando novo cliente se cadastra
- */
-async function enviarNotificacaoNovoCliente(nome, whatsapp, email) {
-  const numeroFelipe = process.env.NUMERO_FELIPE;
-  if (!numeroFelipe) return;
-
-  const mensagem = `
-📝 *NOVO CLIENTE CADASTRADO NO SITE!*
-
-👤 ${nome}
-📱 ${whatsapp}
-📧 ${email || 'N/A'}
-
-Link para contato: https://wa.me/${whatsapp.replace(/\D/g, '')}
-`.trim();
-
-  try {
-    await enviarMensagem(numeroFelipe, mensagem);
-    logger.info(`[notif-cadastro] Notificação enviada para Felipe: ${nome}`);
-  } catch (error) {
-    logger.error('[notif-cadastro] Erro ao enviar notificação:', error.message);
-  }
-}
 
 /**
  * LOGIN COM CELULAR + CPF (novo sistema)
  * POST /auth/cliente/login
- * Body: { celular: "95987654321", cpf: "12345678901" }
+ * Body: { celular: string, cpf: string }
  */
 export async function loginCelularCpf(req, res) {
   try {
     const { celular, cpf } = req.body;
 
-    // Validar celular
-    const celularNorm = (celular || '').replace(/\D/g, '');
-    if (!celularNorm || celularNorm.length < 10) {
-      return res.status(400).json({ sucesso: false, mensagem: 'Celular inválido. Use DDD + número (ex: 95987654321)' });
+    if (!celular || !cpf) {
+      return res.status(400).json({
+        sucesso: false,
+        mensagem: 'Celular e CPF são obrigatórios'
+      });
     }
 
     // Validar CPF
-    const cpfNorm = (cpf || '').replace(/\D/g, '');
-    if (!cpfNorm || cpfNorm.length !== 11) {
-      return res.status(400).json({ sucesso: false, mensagem: 'CPF inválido. Use 11 dígitos.' });
+    if (!validarCPF(cpf)) {
+      return res.status(400).json({
+        sucesso: false,
+        mensagem: 'CPF inválido'
+      });
     }
 
-    // Buscar cliente pelo celular — tenta várias variações do número
-    // Ex: "95987654321" pode estar como "95987654321", "5595987654321", "+5595987654321"
-    const variantes = [
-      celularNorm,
-      '55' + celularNorm,
-      '+55' + celularNorm,
-      celularNorm.startsWith('55') ? celularNorm.slice(2) : null,
-      celularNorm.startsWith('+55') ? celularNorm.slice(3) : null
-    ].filter(Boolean);
+    // Normalizar celular
+    const celularNormalizado = normalizarCelular(celular);
+    const cpfNormalizado = cpf.replace(/\D/g, '');
 
-    let cliente = null;
-    let candidatos = [];
-    for (const variante of variantes) {
-      const rows = query('SELECT * FROM clientes WHERE whatsapp = ?', [variante]);
-      candidatos.push(...rows);
-    }
-
-    if (candidatos.length > 0) {
-      // Preferir o registro que TEM CPF cadastrado
-      cliente = candidatos.find(c => c.cpf && c.cpf.trim()) || candidatos[0];
-    }
+    // Buscar cliente
+    const cliente = queryOne(
+      'SELECT * FROM clientes WHERE REPLACE(REPLACE(whatsapp, " ", ""), "-", "") = ? AND REPLACE(REPLACE(cpf, ".", ""), "-", "") = ?',
+      [celularNormalizado, cpfNormalizado]
+    );
 
     if (!cliente) {
-      return res.status(404).json({ sucesso: false, mensagem: 'Celular não encontrado. Verifique o número ou crie uma conta.' });
-    }
-
-    // Validar CPF
-    const cpfCadastrado = (cliente.cpf || '').replace(/\D/g, '');
-    if (!cpfCadastrado) {
-      return res.status(401).json({ sucesso: false, mensagem: 'Conta sem CPF cadastrado. Acesse pelo Gmail ou fale conosco.' });
-    }
-
-    if (cpfCadastrado !== cpfNorm) {
-      logger.warn(`[login] CPF incorreto para celular ${celularNorm.slice(-4)}`);
-      return res.status(401).json({ sucesso: false, mensagem: 'CPF incorreto.' });
+      logger.warn(`[LOGIN] Cliente não encontrado: ${celularNormalizado}`);
+      return res.status(401).json({
+        sucesso: false,
+        mensagem: 'Celular ou CPF não encontrados'
+      });
     }
 
     // Gerar token JWT
     const token = jwt.sign(
-      { id_cliente: cliente.id_cliente, nome_cliente: cliente.nome, whatsapp: cliente.whatsapp, email: cliente.email },
-      process.env.JWT_SECRET || 'pluma-jwt-secret-2025',
-      { expiresIn: '7d' }
-    );
-
-    logger.info(`[login] Cliente autenticado via celular: ${cliente.nome}`);
-
-    return res.status(200).json({
-      sucesso: true,
-      token,
-      id_cliente: cliente.id_cliente,
-      nome: cliente.nome,
-      whatsapp: cliente.whatsapp,
-      email: cliente.email
-    });
-
-  } catch (error) {
-    logger.error('[login] Erro:', error.message);
-    return res.status(500).json({ sucesso: false, mensagem: 'Erro no servidor' });
-  }
-}
-
-/**
- * LOGIN COM CPF (legado - mantido para compatibilidade)
- * POST /auth/cliente/cpf
- * Body: { cpf: "12345678900" }
- */
-export async function loginComCPF(req, res) {
-  try {
-    const { cpf } = req.body;
-
-    if (!cpf || !validarCPF(cpf)) {
-      return res.status(400).json({
-        sucesso: false,
-        mensagem: 'CPF inválido'
-      });
-    }
-
-    // Buscar cliente por CPF
-    const cliente = await clientesService.findByCPF(cpf.replace(/\D/g, ''));
-    
-    if (!cliente) {
-      return res.status(404).json({
-        sucesso: false,
-        mensagem: 'Cliente não encontrado. Deseja se cadastrar?'
-      });
-    }
-
-    // Retornar dados para confirmação de identidade
-    const ultimos2 = cpf.slice(-2);
-    return res.status(200).json({
-      sucesso: true,
-      id_cliente: cliente.id_cliente,
-      nome: cliente.nome,
-      ja_tem_telefone: !!cliente.whatsapp,
-      precisa_confirmar_identidade: true,
-      ultimos_2_cpf: ultimos2
-    });
-
-  } catch (error) {
-    logger.error('Erro ao fazer login com CPF:', error.message);
-    return res.status(500).json({
-      sucesso: false,
-      mensagem: 'Erro no servidor'
-    });
-  }
-}
-
-/**
- * CONFIRMAR IDENTIDADE
- * POST /auth/cliente/confirmar-identidade
- * Body: { cpf: "12345678900", ultimos_2_digitos: "00" }
- */
-export async function confirmarIdentidade(req, res) {
-  try {
-    const { cpf, ultimos_2_digitos } = req.body;
-
-    if (!cpf || !validarCPF(cpf)) {
-      return res.status(400).json({
-        sucesso: false,
-        mensagem: 'CPF inválido'
-      });
-    }
-
-    // Validar últimos 2 dígitos
-    if (cpf.slice(-2) !== ultimos_2_digitos) {
-      return res.status(400).json({
-        sucesso: false,
-        mensagem: 'Identidade não confirmada. Dígitos incorretos.'
-      });
-    }
-
-    // Buscar cliente
-    const cliente = await clientesService.findByCPF(cpf.replace(/\D/g, ''));
-    
-    if (!cliente) {
-      return res.status(404).json({
-        sucesso: false,
-        mensagem: 'Cliente não encontrado'
-      });
-    }
-
-    // Gerar JWT token
-    const token = jwt.sign(
       {
         id_cliente: cliente.id_cliente,
-        nome_cliente: cliente.nome,
+        nome: cliente.nome,
         whatsapp: cliente.whatsapp,
         email: cliente.email
       },
@@ -205,22 +58,172 @@ export async function confirmarIdentidade(req, res) {
       { expiresIn: '7d' }
     );
 
-    logger.info(`Cliente autenticado: ${cliente.nome} (${cpf})`);
+    logger.info(`[LOGIN] ✓ Cliente autenticado: ${cliente.nome} (${celularNormalizado})`);
 
-    return res.status(200).json({
+    return res.json({
       sucesso: true,
       token,
-      id_cliente: cliente.id_cliente,
-      nome: cliente.nome,
-      whatsapp: cliente.whatsapp,
-      email: cliente.email
+      cliente: {
+        id_cliente: cliente.id_cliente,
+        nome: cliente.nome,
+        whatsapp: cliente.whatsapp,
+        email: cliente.email
+      }
     });
-
   } catch (error) {
-    logger.error('Erro ao confirmar identidade:', error.message);
+    logger.error(`[LOGIN] Erro: ${error.message}`);
     return res.status(500).json({
       sucesso: false,
-      mensagem: 'Erro no servidor'
+      mensagem: 'Erro interno do servidor'
+    });
+  }
+}
+
+/**
+ * LOGIN COM CPF (legado)
+ * POST /auth/cliente/cpf
+ * Body: { cpf: string }
+ */
+export async function loginComCPF(req, res) {
+  try {
+    const { cpf } = req.body;
+
+    if (!cpf) {
+      return res.status(400).json({
+        sucesso: false,
+        mensagem: 'CPF é obrigatório'
+      });
+    }
+
+    // Validar CPF
+    if (!validarCPF(cpf)) {
+      return res.status(400).json({
+        sucesso: false,
+        mensagem: 'CPF inválido'
+      });
+    }
+
+    const cpfNormalizado = cpf.replace(/\D/g, '');
+
+    // Buscar cliente
+    const cliente = queryOne(
+      'SELECT * FROM clientes WHERE REPLACE(REPLACE(cpf, ".", ""), "-", "") = ?',
+      [cpfNormalizado]
+    );
+
+    if (!cliente) {
+      logger.warn(`[LOGIN CPF] Cliente não encontrado: ${cpf}`);
+      return res.status(401).json({
+        sucesso: false,
+        mensagem: 'CPF não encontrado'
+      });
+    }
+
+    // Retornar token temporário para confirmar identidade
+    const tempToken = jwt.sign(
+      { id_cliente: cliente.id_cliente, modo: 'confirmar' },
+      process.env.JWT_SECRET || 'pluma-jwt-secret-2025',
+      { expiresIn: '5m' }
+    );
+
+    return res.json({
+      sucesso: true,
+      tempToken,
+      mensagem: 'Confirme os últimos 2 dígitos do CPF',
+      ultimosDoisDigitos: cliente.cpf.slice(-2)
+    });
+  } catch (error) {
+    logger.error(`[LOGIN CPF] Erro: ${error.message}`);
+    return res.status(500).json({
+      sucesso: false,
+      mensagem: 'Erro interno do servidor'
+    });
+  }
+}
+
+/**
+ * CONFIRMAR IDENTIDADE (últimos 2 dígitos do CPF)
+ * POST /auth/cliente/confirmar-identidade
+ * Body: { tempToken: string, ultimosDoisDigitos: string }
+ */
+export async function confirmarIdentidade(req, res) {
+  try {
+    const { tempToken, ultimosDoisDigitos } = req.body;
+
+    if (!tempToken || !ultimosDoisDigitos) {
+      return res.status(400).json({
+        sucesso: false,
+        mensagem: 'Token temporário e últimos 2 dígitos são obrigatórios'
+      });
+    }
+
+    // Validar token temporário
+    let decoded;
+    try {
+      decoded = jwt.verify(
+        tempToken,
+        process.env.JWT_SECRET || 'pluma-jwt-secret-2025'
+      );
+    } catch (error) {
+      return res.status(401).json({
+        sucesso: false,
+        mensagem: 'Token expirado ou inválido'
+      });
+    }
+
+    // Buscar cliente
+    const cliente = queryOne(
+      'SELECT * FROM clientes WHERE id_cliente = ?',
+      [decoded.id_cliente]
+    );
+
+    if (!cliente) {
+      return res.status(401).json({
+        sucesso: false,
+        mensagem: 'Cliente não encontrado'
+      });
+    }
+
+    // Validar últimos 2 dígitos
+    const cpfDigitos = cliente.cpf.replace(/\D/g, '');
+    const ultimosDoisDigitosCliente = cpfDigitos.slice(-2);
+
+    if (ultimosDoisDigitos !== ultimosDoisDigitosCliente) {
+      return res.status(401).json({
+        sucesso: false,
+        mensagem: 'Identidade não confirmada'
+      });
+    }
+
+    // Gerar token final
+    const token = jwt.sign(
+      {
+        id_cliente: cliente.id_cliente,
+        nome: cliente.nome,
+        whatsapp: cliente.whatsapp,
+        email: cliente.email
+      },
+      process.env.JWT_SECRET || 'pluma-jwt-secret-2025',
+      { expiresIn: '7d' }
+    );
+
+    logger.info(`[CONFIRMAR] ✓ Identidade confirmada: ${cliente.nome}`);
+
+    return res.json({
+      sucesso: true,
+      token,
+      cliente: {
+        id_cliente: cliente.id_cliente,
+        nome: cliente.nome,
+        whatsapp: cliente.whatsapp,
+        email: cliente.email
+      }
+    });
+  } catch (error) {
+    logger.error(`[CONFIRMAR] Erro: ${error.message}`);
+    return res.status(500).json({
+      sucesso: false,
+      mensagem: 'Erro interno do servidor'
     });
   }
 }
@@ -228,112 +231,88 @@ export async function confirmarIdentidade(req, res) {
 /**
  * REGISTRAR NOVO CLIENTE
  * POST /auth/cliente/registrar
- * Body: { cpf, nome, celular, email }
+ * Body: { nome, celular, cpf, email }
  */
 export async function registrarCliente(req, res) {
   try {
-    const { cpf, nome, celular, email } = req.body;
-
-    logger.info(`[AUTH] registrarCliente recebido - cpf: ${cpf}, nome: ${nome}, celular: ${celular}, email: ${email}`);
+    const { nome, celular, cpf, email } = req.body;
 
     // Validações
-    if (!cpf || !validarCPF(cpf)) {
-      logger.warn(`[AUTH] CPF inválido: ${cpf}`);
+    if (!nome || !celular || !cpf) {
+      return res.status(400).json({
+        sucesso: false,
+        mensagem: 'Nome, celular e CPF são obrigatórios'
+      });
+    }
+
+    if (!validarCPF(cpf)) {
       return res.status(400).json({
         sucesso: false,
         mensagem: 'CPF inválido'
       });
     }
 
-    if (!nome || nome.length < 3) {
-      return res.status(400).json({
-        sucesso: false,
-        mensagem: 'Nome deve ter pelo menos 3 caracteres'
-      });
-    }
+    const celularNormalizado = normalizarCelular(celular);
+    const cpfNormalizado = cpf.replace(/\D/g, '');
+    const idCliente = uuidv4();
 
-    if (!celular || (celular.replace(/\D/g, '').length < 10 || celular.replace(/\D/g, '').length > 11)) {
-      return res.status(400).json({
-        sucesso: false,
-        mensagem: 'Celular inválido'
-      });
-    }
+    // Verificar se celular já existe
+    const clienteExistente = queryOne(
+      'SELECT id_cliente FROM clientes WHERE REPLACE(REPLACE(whatsapp, " ", ""), "-", "") = ?',
+      [celularNormalizado]
+    );
 
-    // Verificar se CPF já existe
-    const cpfNumero = cpf.replace(/\D/g, '');
-    const clienteExistente = await clientesService.findByCPF(cpfNumero);
-    
     if (clienteExistente) {
       return res.status(409).json({
         sucesso: false,
-        mensagem: 'CPF já cadastrado no sistema'
+        mensagem: 'Celular já cadastrado'
       });
     }
 
-    // Normalizar celular
-    const whatsappNumero = normalizarCelular(celular);
-
-    // Criar cliente
-    const resultado = await clientesService.criarCliente({
-      cpf: cpfNumero,
-      nome,
-      whatsapp: whatsappNumero,
-      email: email || ''
-    });
-
-    if (!resultado.success) {
-      return res.status(500).json({
-        sucesso: false,
-        mensagem: resultado.error || 'Erro ao criar cliente'
-      });
-    }
-
-    // Criar entrada em LEADS
-    const leadResultado = await leadsService.criarLead(
-      nome,
-      whatsappNumero,
-      email || '',
-      'site_cadastro'
+    // Inserir novo cliente
+    const agora = new Date().toISOString();
+    const result = run(
+      `INSERT INTO clientes (id_cliente, nome, whatsapp, cpf, email, data_primeiro_pedido, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [idCliente, nome, celularNormalizado, cpfNormalizado, email || null, agora, agora, agora]
     );
 
-    if (!leadResultado.success) {
-      logger.warn(`[AUTH] Aviso ao criar lead para ${nome}: ${leadResultado.error}`);
-      // Não falhar o registro se o lead não for criado, apenas avisar
-    } else {
-      // Notificar Felipe sobre novo cadastro no site
-      enviarNotificacaoNovoCliente(nome, whatsappNumero, email).catch(e =>
-        logger.warn('[notif-cadastro] Erro ao notificar:', e.message)
-      );
+    if (!result.success) {
+      return res.status(500).json({
+        sucesso: false,
+        mensagem: 'Erro ao registrar cliente'
+      });
     }
 
-    // Gerar JWT token
+    // Gerar token
     const token = jwt.sign(
       {
-        id_cliente: resultado.idCliente,
-        nome_cliente: nome,
-        whatsapp: whatsappNumero,
-        email: email || ''
+        id_cliente: idCliente,
+        nome: nome,
+        whatsapp: celularNormalizado,
+        email: email || null
       },
       process.env.JWT_SECRET || 'pluma-jwt-secret-2025',
       { expiresIn: '7d' }
     );
 
-    logger.info(`Novo cliente registrado: ${nome} (${cpfNumero})`);
+    logger.info(`[REGISTRAR] ✓ Novo cliente criado: ${nome} (${celularNormalizado})`);
 
     return res.status(201).json({
       sucesso: true,
       token,
-      id_cliente: resultado.idCliente,
-      nome,
-      whatsapp: whatsappNumero,
-      email: email || ''
+      cliente: {
+        id_cliente: idCliente,
+        nome: nome,
+        whatsapp: celularNormalizado,
+        email: email || null
+      }
     });
-
   } catch (error) {
-    logger.error('Erro ao registrar cliente:', error.message);
+    logger.error(`[REGISTRAR] Erro: ${error.message}`);
     return res.status(500).json({
       sucesso: false,
-      mensagem: 'Erro no servidor'
+      mensagem: 'Erro interno do servidor'
     });
   }
 }
@@ -341,33 +320,37 @@ export async function registrarCliente(req, res) {
 /**
  * VALIDAR TOKEN
  * POST /auth/validar-token
- * Headers: Authorization: Bearer TOKEN
+ * Headers: Authorization: Bearer <token>
  */
-export async function validarToken(req, res) {
+export function validarToken(req, res) {
   try {
-    // Se chegou aqui, o middleware já validou o token
-    const cliente = await clientesService.findById(req.clienteId);
-    
+    // req.clienteId e req.clienteInfo já foram setados pelo middleware
+    const cliente = queryOne(
+      'SELECT * FROM clientes WHERE id_cliente = ?',
+      [req.clienteId]
+    );
+
     if (!cliente) {
-      return res.status(404).json({
+      return res.status(401).json({
         sucesso: false,
         mensagem: 'Cliente não encontrado'
       });
     }
 
-    return res.status(200).json({
+    return res.json({
       sucesso: true,
-      id_cliente: cliente.id_cliente,
-      nome_cliente: cliente.nome,
-      whatsapp: cliente.whatsapp,
-      email: cliente.email
+      cliente: {
+        id_cliente: cliente.id_cliente,
+        nome: cliente.nome,
+        whatsapp: cliente.whatsapp,
+        email: cliente.email
+      }
     });
-
   } catch (error) {
-    logger.error('Erro ao validar token:', error.message);
+    logger.error(`[VALIDAR] Erro: ${error.message}`);
     return res.status(500).json({
       sucesso: false,
-      mensagem: 'Erro no servidor'
+      mensagem: 'Erro interno do servidor'
     });
   }
 }
@@ -375,79 +358,79 @@ export async function validarToken(req, res) {
 /**
  * LOGOUT
  * POST /auth/logout
+ * Body: { token: string } (opcional)
  */
-export async function logout(req, res) {
+export function logout(req, res) {
   try {
-    // Token é gerenciado no frontend (sessionStorage)
-    // Servidor apenas confirma logout
-    return res.status(200).json({
+    // Simplesmente retorna sucesso
+    // O token será invalidado no cliente (localStorage)
+    return res.json({
       sucesso: true,
       mensagem: 'Logout realizado com sucesso'
     });
   } catch (error) {
-    logger.error('Erro ao fazer logout:', error.message);
+    logger.error(`[LOGOUT] Erro: ${error.message}`);
     return res.status(500).json({
       sucesso: false,
-      mensagem: 'Erro no servidor'
+      mensagem: 'Erro ao fazer logout'
     });
   }
 }
 
 /**
- * GOOGLE OAUTH CALLBACK
+ * GOOGLE OAUTH - Callback
  * GET /auth/google/callback
  */
-export async function googleCallback(req, res) {
+export function googleCallback(req, res) {
   try {
-    const { id, displayName, emails } = req.user;
-    const email = emails?.[0]?.value || '';
+    // req.user foi setado pelo passport
+    const usuario = req.user;
 
-    // Buscar ou criar cliente
-    let cliente = await clientesService.findByGoogleId(id);
-    
-    if (!cliente) {
-      // Criar novo cliente
-      const resultado = await clientesService.criarCliente({
-        nome: displayName,
-        email,
-        google_id: id,
-        fonte_registro: 'google_oauth'
-      });
-
-      if (!resultado.success) {
-        return res.redirect('/?auth=failed&error=create');
-      }
-
-      cliente = {
-        id_cliente: resultado.idCliente,
-        nome: displayName,
-        email,
-        google_id: id
-      };
-
-      // Nota: Para Google OAuth, o celular será capturado no checkout
-      // Por enquanto, não criamos lead sem celular (campo obrigatório)
-      logger.info(`[AUTH] Novo cliente Google OAuth criado (sem celular): ${displayName} (${email})`);
-    } else {
-      logger.info(`[AUTH] Cliente existente Google OAuth: ${cliente.nome}`);
+    if (!usuario) {
+      return res.redirect('/?auth=failed');
     }
 
-    // Gerar JWT token
+    // Buscar ou criar cliente com google_id
+    let cliente = queryOne(
+      'SELECT * FROM clientes WHERE google_id = ?',
+      [usuario.id]
+    );
+
+    if (!cliente) {
+      // Criar novo cliente
+      const idCliente = uuidv4();
+      const agora = new Date().toISOString();
+
+      run(
+        `INSERT INTO clientes (id_cliente, nome, email, google_id, data_primeiro_pedido, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [idCliente, usuario.displayName || usuario.emails?.[0]?.value || 'Google User', usuario.emails?.[0]?.value || null, usuario.id, agora, agora, agora]
+      );
+
+      cliente = queryOne(
+        'SELECT * FROM clientes WHERE id_cliente = ?',
+        [idCliente]
+      );
+    }
+
+    // Gerar token
     const token = jwt.sign(
       {
         id_cliente: cliente.id_cliente,
-        nome_cliente: cliente.nome,
-        email: cliente.email
+        nome: cliente.nome,
+        email: cliente.email,
+        google_id: cliente.google_id
       },
       process.env.JWT_SECRET || 'pluma-jwt-secret-2025',
       { expiresIn: '7d' }
     );
 
-    // Redirecionar para home com token
-    res.redirect(`/?auth=success&token=${token}&name=${encodeURIComponent(cliente.nome)}`);
+    logger.info(`[GOOGLE] ✓ Cliente autenticado via Google: ${cliente.nome}`);
 
+    // Redirecionar para portal com token
+    res.redirect(`/?token=${token}&auth=success`);
   } catch (error) {
-    logger.error('Erro no callback Google:', error.message);
-    res.redirect('/?auth=failed&error=callback');
+    logger.error(`[GOOGLE] Erro: ${error.message}`);
+    res.redirect('/?auth=error');
   }
 }
