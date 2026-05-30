@@ -1,16 +1,23 @@
 import { Router } from 'express';
-import { ipWhitelist } from '../middleware/ipWhitelist.js';
+import { adminAuth } from '../middleware/adminAuth.js';
 import {
+  adminLogin,
   getDashboardStats,
+  getCatalog,
+  syncPrecosCatalogo,
   listEstoque,
   createEstoque,
   updateEstoqueQuantidade,
   updateEstoquePreco,
+  baixaEstoque,
+  listBaixas,
   listPedidos,
   getPedidoDetail,
   updatePagamento,
   updateEntrega,
   updateEndereco,
+  deletePedido,
+  updateStatusPedido,
   listClientes,
   getClienteDetail,
   getClientePedidos,
@@ -20,32 +27,47 @@ import {
 
 const router = Router();
 
-// Aplicar middleware de IP whitelist a todos os endpoints
-router.use(ipWhitelist);
+// ─── LOGIN (público — sem auth) ───────────────────────────────────────────────
+// Montado em /admin/api → este handler responde em /admin/api/auth/login
+router.post('/auth/login', adminLogin);
 
-// DASHBOARD
-router.get('/api/dashboard/stats', getDashboardStats);
+// ─── ROTAS PROTEGIDAS — JWT obrigatório ──────────────────────────────────────
+router.use(adminAuth);
 
-// ESTOQUE (4 endpoints)
-router.get('/api/estoque', listEstoque);
-router.post('/api/estoque', createEstoque);
-router.patch('/api/estoque/:sku/quantidade', updateEstoqueQuantidade);
-router.patch('/api/estoque/:sku/preco', updateEstoquePreco);
+// DASHBOARD  →  /admin/api/dashboard/stats
+router.get('/dashboard/stats', getDashboardStats);
 
-// PEDIDOS (5 endpoints)
-router.get('/api/pedidos', listPedidos);
-router.get('/api/pedidos/:numero', getPedidoDetail);
-router.patch('/api/pedidos/:numero/pagamento', updatePagamento);
-router.patch('/api/pedidos/:numero/entrega', updateEntrega);
-router.patch('/api/pedidos/:numero/endereco', updateEndereco);
+// CATÁLOGO (fonte única da verdade para preços)
+router.get('/catalog', getCatalog);
+router.post('/catalog/sync-precos', syncPrecosCatalogo);
 
-// CLIENTES (3 endpoints)
-router.get('/api/clientes', listClientes);
-router.get('/api/clientes/:id', getClienteDetail);
-router.get('/api/clientes/:id/pedidos', getClientePedidos);
+// ESTOQUE  →  /admin/api/estoque
+router.get('/estoque', listEstoque);
+// Relatório de Baixas (precisa vir antes das rotas com :sku)
+router.get('/estoque/baixas', listBaixas);
+router.post('/estoque', createEstoque);
+router.patch('/estoque/:sku/quantidade', updateEstoqueQuantidade);
+router.patch('/estoque/:sku/preco', updateEstoquePreco);
+// Baixa manual de estoque (motivo obrigatório + log de auditoria)
+router.post('/estoque/:sku/baixa', baixaEstoque);
 
-// LEADS (2 endpoints)
-router.get('/api/leads', listLeads);
-router.patch('/api/leads/:id/status', updateLeadStatus);
+// PEDIDOS  →  /admin/api/pedidos
+router.get('/pedidos', listPedidos);
+router.get('/pedidos/:numero', getPedidoDetail);
+router.patch('/pedidos/:numero/pagamento', updatePagamento);
+router.patch('/pedidos/:numero/entrega', updateEntrega);
+router.patch('/pedidos/:numero/endereco', updateEndereco);
+
+router.delete('/pedidos/:numero', deletePedido);
+router.put('/pedidos/:numero/status', updateStatusPedido);
+
+// CLIENTES  →  /admin/api/clientes
+router.get('/clientes', listClientes);
+router.get('/clientes/:id', getClienteDetail);
+router.get('/clientes/:id/pedidos', getClientePedidos);
+
+// LEADS  →  /admin/api/leads
+router.get('/leads', listLeads);
+router.patch('/leads/:id/status', updateLeadStatus);
 
 export default router;

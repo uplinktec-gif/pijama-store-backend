@@ -5,6 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Admin Pijama Store</title>
   <link rel="stylesheet" href="admin.css">
+  <!-- Markdown renderer (usado pelo widget COO no dashboard) -->
+  <script src="https://cdn.jsdelivr.net/npm/marked@12/marked.min.js" defer></script>
+  <!-- jsPDF + autotable (usado pelo botão "Baixar Relatório PDF" no Estoque) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js" defer></script>
 </head>
 <body>
   <div class="admin-container">
@@ -23,6 +28,10 @@
         <a href="#estoque" class="nav-link" data-section="estoque">
           <span class="icon">📦</span>
           <span class="label">Estoque</span>
+        </a>
+        <a href="#baixas" class="nav-link" data-section="baixas">
+          <span class="icon">📉</span>
+          <span class="label">Relatório de Baixas</span>
         </a>
         <a href="#pedidos" class="nav-link" data-section="pedidos">
           <span class="icon">📋</span>
@@ -66,6 +75,27 @@
           <h3>Vendas - Últimos 7 Dias</h3>
           <div id="chartArea"></div>
         </div>
+
+        <!-- IA Diretor de Operações -->
+        <div class="coo-widget">
+          <div class="coo-header">
+            <h3>🤖 COO — Diretor de Operações</h3>
+            <span class="coo-subtitle">Pergunte sobre estoque, vendas e reposição. Resposta baseada no estado atual do banco.</span>
+          </div>
+          <div id="cooMensagens" class="coo-mensagens">
+            <div class="coo-msg coo-msg-bot">
+              <div class="coo-bubble">
+                Oi! Sou seu COO. Posso analisar o estoque, vendas e sugerir reposições.
+                <br><br>
+                Tente algo como: <em>"Quais modelos preciso repor com urgência?"</em> ou <em>"Como vão as vendas do mês?"</em>
+              </div>
+            </div>
+          </div>
+          <form id="cooForm" class="coo-form">
+            <input id="cooInput" type="text" placeholder="Pergunte ao COO..." autocomplete="off" maxlength="2000">
+            <button type="submit" id="cooSubmit">Enviar</button>
+          </form>
+        </div>
       </section>
 
       <!-- Estoque Section -->
@@ -73,6 +103,13 @@
         <div class="section-toolbar">
           <button id="addEstoqueBtn" class="btn btn-primary">➕ Novo Item</button>
           <input type="text" id="estoqueSearch" class="search-box" placeholder="Buscar modelo...">
+          <div id="estoqueFiltroBadge" class="filter-badge" style="display:none;">
+            <span id="estoqueFiltroLabel">⚠️ Mostrando apenas estoque crítico</span>
+            <button type="button" id="baixarRelatorioPdfBtn" class="btn-pdf" title="Baixar relatório em PDF para compras">
+              📄 Baixar Relatório (PDF)
+            </button>
+            <button type="button" id="limparEstoqueFiltro" title="Limpar filtro">✕</button>
+          </div>
         </div>
         <div class="table-responsive">
           <table id="estoqueTable" class="data-table">
@@ -87,6 +124,37 @@
                 <th>Total</th>
                 <th>Status</th>
                 <th>Ações</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Relatório de Baixas Section -->
+      <section id="baixas-section" class="section">
+        <div class="section-toolbar">
+          <div class="filters">
+            <select id="baixaMotivoFilter" class="select-box">
+              <option value="">Todos os Motivos</option>
+            </select>
+            <input type="date" id="baixaDataInicio" class="select-box" title="Data inicial">
+            <input type="date" id="baixaDataFim" class="select-box" title="Data final">
+          </div>
+          <input type="text" id="baixaSearch" class="search-box" placeholder="Buscar SKU...">
+        </div>
+        <div id="baixasResumo" class="baixas-resumo"></div>
+        <div class="table-responsive">
+          <table id="baixasTable" class="data-table">
+            <thead>
+              <tr>
+                <th>Data/Hora</th>
+                <th>SKU</th>
+                <th>Produto</th>
+                <th>Qtd</th>
+                <th>Motivo</th>
+                <th>Observação</th>
+                <th>Usuário</th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -249,6 +317,83 @@
       <div class="modal-actions">
         <button id="enviarRespostaBtn" class="btn btn-primary">Enviar Resposta</button>
         <button id="fecharSuporteModal" class="btn btn-secondary">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Novo Item de Estoque (preço herda do catálogo) -->
+  <div id="novoEstoqueModal" class="modal">
+    <div class="modal-content">
+      <span class="modal-close" data-close="novoEstoqueModal">&times;</span>
+      <h2>➕ Novo Item de Estoque</h2>
+      <p style="color:#666; font-size:13px; margin-bottom:18px;">
+        O preço é herdado automaticamente do catálogo central. Não há campo de digitação para evitar erros.
+      </p>
+      <div style="display:grid; gap:14px;">
+        <div>
+          <label style="display:block; font-size:13px; font-weight:600; color:#444; margin-bottom:5px;">Modelo</label>
+          <select id="novoEstoqueModelo" class="select-box" style="width:100%;"></select>
+        </div>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:14px;">
+          <div>
+            <label style="display:block; font-size:13px; font-weight:600; color:#444; margin-bottom:5px;">Tamanho</label>
+            <select id="novoEstoqueTamanho" class="select-box" style="width:100%;"></select>
+          </div>
+          <div>
+            <label style="display:block; font-size:13px; font-weight:600; color:#444; margin-bottom:5px;">Cor</label>
+            <select id="novoEstoqueCor" class="select-box" style="width:100%;"></select>
+          </div>
+        </div>
+        <div>
+          <label style="display:block; font-size:13px; font-weight:600; color:#444; margin-bottom:5px;">Quantidade</label>
+          <input id="novoEstoqueQtd" type="number" min="0" value="0" class="search-box" style="width:100%;">
+        </div>
+        <div id="novoEstoquePrecoBadge"
+             style="background:#e8f8ee; color:#1b5e20; padding:10px 14px; border-radius:6px; font-weight:600;">
+          💰 Preço (do catálogo): <span id="novoEstoquePrecoValor">—</span>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button id="salvarNovoEstoqueBtn" class="btn btn-primary">Cadastrar</button>
+        <button class="btn btn-secondary" data-close="novoEstoqueModal">Cancelar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Baixa / Ajuste de Estoque (motivo OBRIGATÓRIO) -->
+  <div id="baixaModal" class="modal">
+    <div class="modal-content">
+      <span class="modal-close" data-close="baixaModal">&times;</span>
+      <h2>📉 Baixa / Ajuste de Estoque</h2>
+      <p style="color:#666; font-size:13px; margin-bottom:18px;">
+        Toda saída que não passa pelo checkout de vendas precisa ser auditada.
+        Informe a quantidade e o <strong>motivo</strong> (obrigatório).
+      </p>
+      <div id="baixaItemInfo"
+           style="background:#f4f4f7; padding:10px 14px; border-radius:6px; font-weight:600; margin-bottom:14px;">
+        —
+      </div>
+      <input type="hidden" id="baixaSku">
+      <div style="display:grid; gap:14px;">
+        <div>
+          <label style="display:block; font-size:13px; font-weight:600; color:#444; margin-bottom:5px;">Quantidade a baixar *</label>
+          <input id="baixaQtd" type="number" min="1" step="1" value="1" class="search-box" style="width:100%;">
+        </div>
+        <div>
+          <label style="display:block; font-size:13px; font-weight:600; color:#444; margin-bottom:5px;">Motivo da Baixa *</label>
+          <select id="baixaMotivo" class="select-box" style="width:100%;">
+            <option value="">— Selecione o motivo —</option>
+          </select>
+        </div>
+        <div>
+          <label style="display:block; font-size:13px; font-weight:600; color:#444; margin-bottom:5px;">Observação (opcional)</label>
+          <textarea id="baixaObservacao" class="textarea" rows="2"
+                    placeholder="Ex.: nome da blogueira, parente ou cliente da troca"></textarea>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button id="confirmarBaixaBtn" class="btn btn-danger">Confirmar Baixa</button>
+        <button class="btn btn-secondary" data-close="baixaModal">Cancelar</button>
       </div>
     </div>
   </div>
