@@ -370,6 +370,45 @@ function createTables() {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
+    -- ─── Módulo financeiro (importador passivo do extrato PJ via MCP) ───────────
+    CREATE TABLE IF NOT EXISTS categorias_financeiras (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      nome TEXT NOT NULL UNIQUE,
+      tipo TEXT NOT NULL,                       -- 'RECEITA' | 'DESPESA'
+      cor TEXT DEFAULT '#888888',               -- cor do badge na UI
+      ativo INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS transacoes_financeiras (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      external_id TEXT UNIQUE,                   -- ID da transação no banco (idempotência: não importa 2x)
+      data_transacao TEXT NOT NULL,             -- data da movimentação (ISO)
+      valor REAL NOT NULL,                      -- sempre positivo; sinal vem de tipo_movimento
+      tipo_movimento TEXT NOT NULL,             -- 'CREDITO' | 'DEBITO'
+      contraparte TEXT,                         -- recebedor (débito) / pagador (crédito)
+      descricao TEXT,                           -- histórico do extrato
+      categoria_id INTEGER,                     -- FK; NULL = pendente de categorização
+      status_categorizacao TEXT DEFAULT 'PENDENTE', -- 'PENDENTE' | 'CATEGORIZADO'
+      origem TEXT DEFAULT 'mcp',                -- 'mcp' (importado) | 'manual'
+      raw_json TEXT,                            -- payload bruto do banco (auditoria)
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(categoria_id) REFERENCES categorias_financeiras(id)
+    );
+
+    -- Plano de contas oficial (idempotente — INSERT OR IGNORE pelo nome único)
+    INSERT OR IGNORE INTO categorias_financeiras (nome, tipo, cor) VALUES
+      ('Receita de Vendas',     'RECEITA', '#16a34a'),
+      ('Aporte de Capital',     'RECEITA', '#22c55e'),
+      ('Fornecedores/Fábrica',  'DESPESA', '#dc2626'),
+      ('Frete/Logística',       'DESPESA', '#ea580c'),
+      ('Embalagens/Insumos',    'DESPESA', '#d97706'),
+      ('Marketing/Tráfego Pago','DESPESA', '#7c3aed'),
+      ('Pró-labore',            'DESPESA', '#0891b2'),
+      ('Taxas e Impostos',      'DESPESA', '#b91c1c'),
+      ('Assinaturas/Software',  'DESPESA', '#2563eb');
+
     CREATE INDEX IF NOT EXISTS idx_pedidos_whatsapp ON pedidos(cliente_whatsapp);
     CREATE INDEX IF NOT EXISTS idx_pedidos_status_pagamento ON pedidos(status_pagamento);
     CREATE INDEX IF NOT EXISTS idx_pedidos_status_entrega ON pedidos(status_entrega);
@@ -388,6 +427,10 @@ function createTables() {
     CREATE INDEX IF NOT EXISTS idx_webhooks_fila_morta_versao ON webhooks_fila_morta(versao);
     CREATE INDEX IF NOT EXISTS idx_webhooks_consumidores_ativo ON webhooks_consumidores(ativo);
     CREATE INDEX IF NOT EXISTS idx_webhooks_fila_morta_timestamp ON webhooks_fila_morta(timestamp);
+    CREATE INDEX IF NOT EXISTS idx_transacoes_data ON transacoes_financeiras(data_transacao DESC);
+    CREATE INDEX IF NOT EXISTS idx_transacoes_status ON transacoes_financeiras(status_categorizacao);
+    CREATE INDEX IF NOT EXISTS idx_transacoes_categoria ON transacoes_financeiras(categoria_id);
+    CREATE INDEX IF NOT EXISTS idx_transacoes_external ON transacoes_financeiras(external_id);
     CREATE INDEX IF NOT EXISTS idx_log_estoque_data ON log_estoque(data_hora DESC);
     CREATE INDEX IF NOT EXISTS idx_log_estoque_sku ON log_estoque(sku);
     CREATE INDEX IF NOT EXISTS idx_log_estoque_motivo ON log_estoque(motivo);
@@ -407,6 +450,18 @@ function runMigrations() {
   // v1 — OTP via WhatsApp para login frictionless
   safe('ALTER TABLE clientes ADD COLUMN otp_atual TEXT');
   safe('ALTER TABLE clientes ADD COLUMN otp_expira_em TEXT');
+
+  // v2 — Remove categorias do seed provisório antigo que não estão no plano
+  // oficial, APENAS se não houver transação vinculada (preserva dados reais).
+  try {
+    const obsoletas = ['Vendas','Outras Receitas','Fornecedores','Frete','Impostos','Marketing','Despesas Gerais'];
+    const del = db.prepare(
+      `DELETE FROM categorias_financeiras
+       WHERE nome = ?
+         AND NOT EXISTS (SELECT 1 FROM transacoes_financeiras t WHERE t.categoria_id = categorias_financeiras.id)`
+    );
+    for (const nome of obsoletas) del.run(nome);
+  } catch (_) { /* tabelas podem não existir em bases muito antigas */ }
 
   logger.debug('✓ Migrações executadas');
 }

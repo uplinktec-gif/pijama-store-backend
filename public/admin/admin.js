@@ -11,17 +11,7 @@ let currentClienteId = null;
 let currentSuporteId = null;
 // Estado de filtros (cards do dashboard funcionam como atalhos)
 let estoqueFiltro = { critico: false };
-
-// Motivos válidos para baixa manual de estoque — espelha o backend
-// (src/services/sqlite/estoque.js → MOTIVOS_BAIXA). Fonte da verdade é o
-// servidor: toda baixa é re-validada no POST /estoque/:sku/baixa.
-const MOTIVOS_BAIXA = [
-  'Ação de Marketing / Permuta',
-  'Uso Pessoal / Presente',
-  'Defeito de Fábrica / Avaria',
-  'Troca de Cliente',
-  'Ajuste de Inventário (Perda/Roubo)'
-];
+// (MOTIVOS_BAIXA definido mais abaixo, na seção de Baixa de Estoque)
 
 // Initialize
 document.addEventListener('DOMContentLoaded', async () => {
@@ -134,6 +124,16 @@ function setupEventListeners() {
   // Suporte filter
   document.getElementById('suporteStatusFilter').addEventListener('change', () => loadSuporte());
 
+  // Financeiro
+  ['finStatusFilter','finTipoFilter','finInicio','finFim'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('change', () => loadFinTransacoes());
+  });
+  const finBusca = document.getElementById('finBusca');
+  if (finBusca) finBusca.addEventListener('input', debounce(() => loadFinTransacoes(), 300));
+  const finImp = document.getElementById('finImportarBtn');
+  if (finImp) finImp.addEventListener('click', importarExtrato);
+
   // Modals
   setupModals();
 }
@@ -207,7 +207,8 @@ function showSection(section) {
     pedidos: 'Pedidos',
     clientes: 'Clientes',
     leads: 'Leads',
-    suporte: 'Suporte'
+    suporte: 'Suporte',
+    financeiro: 'Financeiro'
   };
   document.getElementById('sectionTitle').textContent = titles[section] || 'Dashboard';
 
@@ -225,6 +226,7 @@ function showSection(section) {
     case 'clientes': loadClientes(); break;
     case 'leads': loadLeads(); break;
     case 'suporte': loadSuporte(); break;
+    case 'financeiro': loadFinanceiro(); break;
   }
 }
 
@@ -1076,6 +1078,121 @@ function debounce(fn, delay) {
 function logout() {
   localStorage.removeItem('adminToken');
   window.location.href = '/admin/login.html';
+}
+
+// ========================================
+// FINANCEIRO (importador passivo + categorização)
+// ========================================
+let finCategorias = [];
+
+function fmtBRL(v) {
+  return Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+async function loadFinanceiro() {
+  // Carrega categorias uma vez (para os dropdowns)
+  if (finCategorias.length === 0) {
+    const c = await apiFetch('/financeiro/categorias');
+    if (c?.success) finCategorias = c.categorias || [];
+  }
+  await loadFinDashboard();
+  await loadFinTransacoes();
+}
+
+async function loadFinDashboard() {
+  const data = await apiFetch('/financeiro/dashboard');
+  if (!data) return;
+  const saldo = Number(data.saldo) || 0;
+  const saldoCor = saldo >= 0 ? 'success' : 'critical';
+  const cards = [
+    { t: 'Receita do mês', v: `R$ ${fmtBRL(data.receita)}`, cls: 'success', icon: '💚' },
+    { t: 'Despesa do mês', v: `R$ ${fmtBRL(data.despesa)}`, cls: 'critical', icon: '❤️' },
+    { t: 'Saldo operacional', v: `${saldo >= 0 ? '+' : '−'} R$ ${fmtBRL(Math.abs(saldo))}`, cls: saldoCor, icon: saldo >= 0 ? '🔵' : '🔴' },
+    { t: 'Pendentes', v: data.pendentes || 0, cls: data.pendentes > 0 ? 'warning' : 'success', icon: '🗂️' }
+  ];
+  document.getElementById('finCards').innerHTML = cards.map(c => `
+    <div class="card ${c.cls}">
+      <h3>${c.icon} ${c.t}</h3>
+      <div class="value" style="font-size:26px;">${c.v}</div>
+    </div>`).join('');
+}
+
+async function loadFinTransacoes() {
+  const params = new URLSearchParams();
+  const status = document.getElementById('finStatusFilter')?.value;
+  const tipo = document.getElementById('finTipoFilter')?.value;
+  const inicio = document.getElementById('finInicio')?.value;
+  const fim = document.getElementById('finFim')?.value;
+  const busca = document.getElementById('finBusca')?.value;
+  if (status) params.set('status', status);
+  if (tipo) params.set('tipo', tipo);
+  if (inicio) params.set('inicio', inicio);
+  if (fim) params.set('fim', fim);
+  if (busca) params.set('busca', busca);
+  const qs = params.toString();
+
+  const data = await apiFetch(`/financeiro/transacoes${qs ? `?${qs}` : ''}`);
+  if (!data) return;
+  const txs = data.transacoes || [];
+
+  const resumo = document.getElementById('finResumo');
+  if (resumo) resumo.textContent = `${txs.length} lançamento(s) · ${data.pendentes} pendente(s) de categorização`;
+
+  const tbody = document.getElementById('finTable').querySelector('tbody');
+  if (!txs.length) {
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:#888;padding:24px;">Nenhum lançamento. Clique em "Importar extrato".</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = txs.map(t => {
+    const dt = t.data_transacao ? new Date(t.data_transacao).toLocaleDateString('pt-BR', { timeZone: 'America/Boa_Vista' }) : '—';
+    const credito = t.tipo_movimento === 'CREDITO';
+    const tipoBadge = credito
+      ? '<span class="badge badge-success">Crédito</span>'
+      : '<span class="badge badge-danger">Débito</span>';
+    const valorCor = credito ? '#16a34a' : '#dc2626';
+    // dropdown só com categorias do tipo compatível
+    const tipoCat = credito ? 'RECEITA' : 'DESPESA';
+    const opts = finCategorias.filter(c => c.tipo === tipoCat).map(c =>
+      `<option value="${c.id}" ${c.id === t.categoria_id ? 'selected' : ''}>${escapeHtml(c.nome)}</option>`).join('');
+    const sel = `<select class="select-box" onchange="categorizarTransacao(${t.id}, this.value)">
+        <option value="">— categoria —</option>${opts}
+      </select>`;
+    const linhaCls = t.status_categorizacao === 'CATEGORIZADO' ? 'style="background:#f0fff4;"' : '';
+    return `
+      <tr ${linhaCls}>
+        <td>${dt}</td>
+        <td>${tipoBadge}</td>
+        <td style="color:${valorCor};font-weight:600;">R$ ${fmtBRL(t.valor)}</td>
+        <td>${escapeHtml((t.contraparte || '').slice(0, 40))}</td>
+        <td style="color:#777;font-size:13px;">${escapeHtml((t.descricao || '').slice(0, 40))}</td>
+        <td>${sel}</td>
+      </tr>`;
+  }).join('');
+}
+
+async function categorizarTransacao(id, categoriaId) {
+  if (!categoriaId) return;
+  const res = await apiFetch(`/financeiro/transacoes/${id}/categoria`, {
+    method: 'PATCH',
+    body: JSON.stringify({ categoria_id: parseInt(categoriaId) })
+  });
+  if (res?.success) {
+    showToast('✓ Categorizado', 'success');
+    loadFinDashboard();          // atualiza saldo/pendentes
+    loadFinTransacoes();         // atualiza lista (sai dos pendentes)
+  }
+}
+
+async function importarExtrato() {
+  const btn = document.getElementById('finImportarBtn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Importando...'; }
+  const res = await apiFetch('/financeiro/importar', { method: 'POST' });
+  if (btn) { btn.disabled = false; btn.textContent = '⬇️ Importar extrato'; }
+  if (res?.success) {
+    showToast(`✓ ${res.importadas} nova(s) · ${res.ignoradas} já existia(m)`, 'success');
+    loadFinanceiro();
+  }
 }
 
 // ========================================
