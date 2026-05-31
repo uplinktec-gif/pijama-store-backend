@@ -81,6 +81,19 @@ async function processarMensagemComContexto(mensagem, clienteWhatsApp) {
         };
       }
 
+      // ⭐ Sugestão de reposição (Curva ABC — giro 30 dias)
+      if (fp.action === 'reposicao') {
+        try {
+          const { gerarMensagemReposicao } = await import('../reposicao.js');
+          const resposta = await gerarMensagemReposicao();
+          logger.info(`[FastPath] Reposição em ${Date.now() - inicio}ms`);
+          return { success: true, resposta, tipo: 'REPOSICAO' };
+        } catch (err) {
+          logger.error('[FastPath] Erro reposição:', err.message);
+          return { success: false, resposta: 'Erro ao calcular reposição. Tenta de novo?', tipo: 'REPOSICAO' };
+        }
+      }
+
       // ⭐ Alertas de estoque (consulta banco real — mostra o que está acabando)
       if (fp.action === 'alertas_estoque') {
         try {

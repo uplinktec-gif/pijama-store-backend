@@ -4,6 +4,7 @@ import * as senderService from '../whatsapp/sender.js';
 import { gerarRelatorioDiario, analisarEstoque, analisarVendas } from '../business/analytics.js';
 import * as estoqueSheets from '../sqlite/estoque.js';
 import { listarInadimplentes } from '../sqlite/pedidos.js';
+import { gerarMensagemReposicao } from '../business/reposicao.js';
 import { gerarRecomendacaoCliente } from '../business/recomendacoes.js';
 import * as clientesSheets from '../sqlite/clientes.js';
 import { realizarBackup } from '../backup/backupSQLite.js';
@@ -365,6 +366,28 @@ function agendarCobrancaDiaria() {
 }
 
 /**
+ * Envia a sugestão de reposição (Curva ABC) para os fundadores.
+ */
+async function enviarReposicaoDiaria() {
+  try {
+    const msg = await gerarMensagemReposicao();
+    await senderService.enviarMensagem(NUMERO_FELIPE, msg);
+    await senderService.enviarMensagem(NUMERO_JULLY, msg);
+    logger.info('✓ Sugestão de reposição (10h) enviada para Felipe e Júlly');
+  } catch (error) {
+    logger.error('Erro ao enviar reposição diária:', error.message);
+  }
+}
+
+/**
+ * Agenda a sugestão de reposição às 10h de Boa Vista (14:00 UTC),
+ * junto da janela dos alertas de estoque.
+ */
+function agendarReposicaoDiaria() {
+  return schedule.scheduleJob('5 14 * * *' /* 10h05 Boa Vista */, enviarReposicaoDiaria);
+}
+
+/**
  * Inicializa todos os jobs agendados (com proteção contra duplicação)
  */
 function inicializarScheduler() {
@@ -440,6 +463,15 @@ function inicializarScheduler() {
         job: agendarCobrancaDiaria()
       });
       jobsAgendados.add('cobranca-diaria');
+    }
+
+    // Agendar sugestão de reposição às 10h05
+    if (!jobsAgendados.has('reposicao-diaria')) {
+      jobs.push({
+        nome: 'Sugestão de Reposição (10h05)',
+        job: agendarReposicaoDiaria()
+      });
+      jobsAgendados.add('reposicao-diaria');
     }
 
     logger.info(`✓ ${jobs.length} tarefas agendadas:`);
