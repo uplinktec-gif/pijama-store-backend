@@ -370,6 +370,44 @@ function createTables() {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
+    -- ─── Módulo financeiro (importador passivo do extrato PJ via MCP) ───────────
+    CREATE TABLE IF NOT EXISTS categorias_financeiras (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      nome TEXT NOT NULL UNIQUE,
+      tipo TEXT NOT NULL,                       -- 'RECEITA' | 'DESPESA'
+      cor TEXT DEFAULT '#888888',               -- cor do badge na UI
+      ativo INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS transacoes_financeiras (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      external_id TEXT UNIQUE,                   -- ID da transação no banco (idempotência: não importa 2x)
+      data_transacao TEXT NOT NULL,             -- data da movimentação (ISO)
+      valor REAL NOT NULL,                      -- sempre positivo; sinal vem de tipo_movimento
+      tipo_movimento TEXT NOT NULL,             -- 'CREDITO' | 'DEBITO'
+      contraparte TEXT,                         -- recebedor (débito) / pagador (crédito)
+      descricao TEXT,                           -- histórico do extrato
+      categoria_id INTEGER,                     -- FK; NULL = pendente de categorização
+      status_categorizacao TEXT DEFAULT 'PENDENTE', -- 'PENDENTE' | 'CATEGORIZADO'
+      origem TEXT DEFAULT 'mcp',                -- 'mcp' (importado) | 'manual'
+      raw_json TEXT,                            -- payload bruto do banco (auditoria)
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(categoria_id) REFERENCES categorias_financeiras(id)
+    );
+
+    -- Categorias padrão (idempotente — INSERT OR IGNORE pelo nome único)
+    INSERT OR IGNORE INTO categorias_financeiras (nome, tipo, cor) VALUES
+      ('Vendas',        'RECEITA', '#16a34a'),
+      ('Outras Receitas','RECEITA', '#22c55e'),
+      ('Fornecedores',  'DESPESA', '#dc2626'),
+      ('Frete',         'DESPESA', '#ea580c'),
+      ('Impostos',      'DESPESA', '#b91c1c'),
+      ('Marketing',     'DESPESA', '#7c3aed'),
+      ('Despesas Gerais','DESPESA', '#6b7280'),
+      ('Pró-labore',    'DESPESA', '#0891b2');
+
     CREATE INDEX IF NOT EXISTS idx_pedidos_whatsapp ON pedidos(cliente_whatsapp);
     CREATE INDEX IF NOT EXISTS idx_pedidos_status_pagamento ON pedidos(status_pagamento);
     CREATE INDEX IF NOT EXISTS idx_pedidos_status_entrega ON pedidos(status_entrega);
@@ -388,6 +426,10 @@ function createTables() {
     CREATE INDEX IF NOT EXISTS idx_webhooks_fila_morta_versao ON webhooks_fila_morta(versao);
     CREATE INDEX IF NOT EXISTS idx_webhooks_consumidores_ativo ON webhooks_consumidores(ativo);
     CREATE INDEX IF NOT EXISTS idx_webhooks_fila_morta_timestamp ON webhooks_fila_morta(timestamp);
+    CREATE INDEX IF NOT EXISTS idx_transacoes_data ON transacoes_financeiras(data_transacao DESC);
+    CREATE INDEX IF NOT EXISTS idx_transacoes_status ON transacoes_financeiras(status_categorizacao);
+    CREATE INDEX IF NOT EXISTS idx_transacoes_categoria ON transacoes_financeiras(categoria_id);
+    CREATE INDEX IF NOT EXISTS idx_transacoes_external ON transacoes_financeiras(external_id);
     CREATE INDEX IF NOT EXISTS idx_log_estoque_data ON log_estoque(data_hora DESC);
     CREATE INDEX IF NOT EXISTS idx_log_estoque_sku ON log_estoque(sku);
     CREATE INDEX IF NOT EXISTS idx_log_estoque_motivo ON log_estoque(motivo);
