@@ -1,6 +1,6 @@
 import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = process.env.ADMIN_JWT_SECRET || 'pluma-pijamas-secret-2025';
+const JWT_SECRET = process.env.JWT_SECRET || 'pluma-jwt-secret-2025';
 
 /**
  * Middleware que valida o JWT do painel admin

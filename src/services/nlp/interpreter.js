@@ -1,4 +1,4 @@
-import { callAI } from '../../config/gemini.js';
+import { callAI } from '../../config/claude.js';
 import { logger } from '../../utils/logger.js';
 import { env } from '../../config/env.js';
 
@@ -166,6 +166,29 @@ Interprete o pedido e retorne JSON.`;
     }
 
     const result = JSON.parse(jsonMatch[0]);
+
+    // ── SANITIZAÇÃO IMEDIATA ──────────────────────────────────────────────────
+    // Remove sufixos hallucinados ("azul marinho", "azul jeans", "azul com X")
+    // ANTES de qualquer busca de SKU ou validação de estoque.
+    const sanitizarCorInterpreter = (cor) => {
+      if (!cor) return cor;
+      // "Azul Jeans" é cor legítima do catálogo — NÃO remover "jeans".
+      // Apenas alucinações comuns: "marinho", "escuro/claro", "com X".
+      return cor
+        .replace(/[\s-]+marinho/ig, '')
+        .replace(/[\s-]+escuro/ig, '')
+        .replace(/[\s-]+claro/ig, '')
+        .replace(/\s+com\s+\w+/ig, '')
+        .trim();
+    };
+    if (result.pedido?.itens && Array.isArray(result.pedido.itens)) {
+      result.pedido.itens.forEach(item => {
+        const original = item.cor;
+        item.cor = sanitizarCorInterpreter(item.cor);
+        console.log(`[interpreter] Cor extraída: "${original}"${original !== item.cor ? ` → sanitizada: "${item.cor}"` : ' (sem alteração)'}`);
+      });
+    }
+    // ─────────────────────────────────────────────────────────────────────────
 
     if (!result.sucesso) {
       return {

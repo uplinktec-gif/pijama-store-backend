@@ -3,21 +3,33 @@ import { env } from '../../config/env.js';
 import * as estoqueService from '../sqlite/estoque.js';
 
 /**
- * Valida se um modelo existe no catálogo
+ * Normaliza modelo para comparação case-insensitive e sem acento
+ */
+function normalizarModelo(s) {
+  return (s || '').toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, ''); // remove acentos
+}
+
+/**
+ * Valida se um modelo existe no banco de dados (fonte única de verdade)
+ * Case-insensitive e insensível a acentos: "livia" == "Lívia" == "LÍVIA"
  */
 function validarModelo(modelo) {
   if (!modelo) return { valid: false, error: 'Modelo não informado' };
 
-  const modeloUpper = modelo.toUpperCase();
-  if (!env.catalogoModelos.includes(modeloUpper)) {
+  const modeloNorm = normalizarModelo(modelo);
+  const modelosNoBanco = estoqueService.listarModelosDisponiveis();
+  const encontrado = modelosNoBanco.find(m => normalizarModelo(m) === modeloNorm);
+
+  if (!encontrado) {
     return {
       valid: false,
-      error: `Modelo "${modelo}" não existe`,
-      sugestoes: env.catalogoModelos
+      error: `Modelo "${modelo}" não encontrado no estoque`,
+      sugestoes: modelosNoBanco
     };
   }
 
-  return { valid: true, modelo: modeloUpper };
+  return { valid: true, modelo: encontrado }; // retorna o nome exato do banco
 }
 
 /**
@@ -39,13 +51,16 @@ function validarTamanho(tamanho) {
 }
 
 /**
- * Valida se uma cor existe no catálogo
+ * Valida se uma cor existe no catálogo (case-insensitive)
  */
 function validarCor(cor) {
   if (!cor) return { valid: false, error: 'Cor não informada' };
 
-  const corLower = cor.toLowerCase();
-  if (!env.catalogoCores.includes(corLower)) {
+  const corNorm = cor.toLowerCase().trim();
+  // Compara ambos os lados em lowercase para não falhar com AZUL vs azul
+  const corEncontrada = env.catalogoCores.find(c => c.toLowerCase().trim() === corNorm);
+
+  if (!corEncontrada) {
     return {
       valid: false,
       error: `Cor "${cor}" não existe`,
@@ -53,7 +68,8 @@ function validarCor(cor) {
     };
   }
 
-  return { valid: true, cor: corLower };
+  // Retorna a cor com a capitalização exata do catálogo (ex: "Azul")
+  return { valid: true, cor: corEncontrada };
 }
 
 /**

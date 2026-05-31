@@ -86,6 +86,15 @@ ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$VPS_USER@$VPS_IP" \
   || err "Falha no npm install"
 ok "Dependências instaladas"
 
+# 8.5 Recompila módulos nativos para a MESMA versão de Node que o PM2 usa.
+# Evita crash "NODE_MODULE_VERSION mismatch" (better-sqlite3) quando o npm install
+# compila para uma ABI diferente da que o runtime (PM2 daemon) está rodando.
+info "Recompilando módulos nativos (better-sqlite3)..."
+ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$VPS_USER@$VPS_IP" \
+  'export PATH="/root/.nvm/versions/node/v24.15.0/bin:$PATH" && cd '"$VPS_DIR"' && npm rebuild better-sqlite3 2>&1 | tail -2' \
+  || echo "  (aviso: rebuild falhou, verifique manualmente)"
+ok "Módulos nativos OK"
+
 # 9. Executar migração na VPS (se banco não existir)
 info "Verificando banco de dados..."
 ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$VPS_USER@$VPS_IP" \
@@ -125,11 +134,23 @@ ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$VPS_USER@$VPS_IP" bash << SSHEOF
 SSHEOF
 sleep 8
 
+# 10.5 Sincronizar preços com o catálogo central (.env MODEL_PRICES → estoque.preco_unitario)
+info "Sincronizando preços com o catálogo central..."
+ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$VPS_USER@$VPS_IP" \
+  "cd $VPS_DIR && $VPS_NODE scripts/sync-precos.mjs 2>&1 | tail -20" \
+  || echo "  (aviso: sync de preços falhou, verifique manualmente)"
+
+# 10.6 Sincronizar fotos otimizadas da variante LUNA preto
+info "Sincronizando fotos LUNA preto no banco..."
+ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$VPS_USER@$VPS_IP" \
+  "cd $VPS_DIR && $VPS_NODE scripts/sync-fotos-luna-preto.mjs 2>&1 | tail -10" \
+  || echo "  (aviso: sync de fotos falhou, verifique manualmente)"
+
 # 11. Health check
 info "Verificando servidor..."
-STATUS=$(curl -s --max-time 8 "http://$VPS_IP:3000/health" 2>/dev/null)
+STATUS=$(curl -s --max-time 8 "http://$VPS_IP:5000/health" 2>/dev/null)
 if echo "$STATUS" | grep -q '"status":"ok"'; then
-  ok "Servidor rodando em http://$VPS_IP:3000"
+  ok "Servidor rodando em http://$VPS_IP:5000"
 else
   echo "  Health check: $STATUS"
   err "Servidor não respondeu. Verifique os logs."
@@ -137,9 +158,9 @@ fi
 
 # 12. Testar painel admin
 info "Verificando painel admin..."
-ADMIN_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 "http://$VPS_IP:3000/admin/" 2>/dev/null)
+ADMIN_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 "http://$VPS_IP:5000/admin/" 2>/dev/null)
 if [ "$ADMIN_STATUS" = "200" ]; then
-  ok "Painel admin acessível: http://$VPS_IP:3000/admin"
+  ok "Painel admin acessível: http://$VPS_IP:5000/admin"
 else
   echo "  (Admin retornou HTTP $ADMIN_STATUS)"
 fi
@@ -154,7 +175,7 @@ echo ""
 echo "========================================"
 ok "Deploy concluído!"
 echo ""
-echo "  🌐 Site:   http://$VPS_IP:3000"
-echo "  🔧 Admin:  http://$VPS_IP:3000/admin"
-echo "  👤 Portal: http://$VPS_IP:3000/portal"
+echo "  🌐 Site:   http://$VPS_IP:5000"
+echo "  🔧 Admin:  http://$VPS_IP:5000/admin"
+echo "  👤 Portal: http://$VPS_IP:5000/portal"
 echo ""

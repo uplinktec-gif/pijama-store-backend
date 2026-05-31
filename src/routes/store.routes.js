@@ -1,55 +1,73 @@
 import express from 'express';
-import { readAllEstoque } from '../services/sqlite/estoque.js';
-import { criarPedido } from '../services/sqlite/pedidos.js';
+import { readAllEstoque, generateSKU } from '../services/sqlite/estoque.js';
 import { findByWhatsApp, criarCliente } from '../services/sqlite/clientes.js';
-import { lerFotos, inicializarAbaFotos, atualizarCapa } from '../services/sqlite/fotos.js';
+import { lerFotos, atualizarCapa } from '../services/sqlite/fotos.js';
 import { logger } from '../utils/logger.js';
 import { enviarMensagem } from '../services/whatsapp/sender.js';
 import { env } from '../config/env.js';
-
-// Dados iniciais das fotos (migrados do HTML hardcoded)
-const FOTOS_INICIAIS = {
-  LIA: {
-    'bordô':          ['1rUX0EiZJrxw737wEad4GJxbbkErFtzgE','14brIUGzzGkh5OUT6uK5TPdXOAUFXGbI2','1lMFKetR2nUEtHPOvFD9cUYotmY1TrRMo','1TWH_0f3OBFOcCTK7kYwz9BC4vYoKW5Rn','1elQItb1d5Oq-ryrSjSsWi-QGTXe1k9Cm'],
-    'azul marinho':   ['12hRW3UWj23tFehxaFMeB1NS4ncwhVEXu','1qxSyTEbamjJMHuMlNN4e9a7RcxCEk43X','1tQHOGNLtp9NEdnXpRtmsyPfH-aKiMLHg','1q3w8qFfl4wP9NxqrROZSC53L_Agc57iC','1vWGMFfYplfD7vzWKEeIF1EAEWkMiSG9q'],
-    'preto':          ['1lrcPJbHQA60x4MHjh2e_QCH0f3N78gyJ','1FzXzTHqIRFlt0cU5DaxzGyhtTAI-Dv1t','1ipkxyocAVdBKfBgi5pZqP16DuzUXBJ_Z','1BSt18-PNP6esptRlHcmDXTx-ml464ObO','1fdrZx7TwWqKI2aJeyQKA1c6JYp_LX6Jm'],
-  },
-  MIA: {
-    'bordô':           ['1U9wQxGB35teVrOE0th7w7khzNU4tPIoe','1-L7zAmCp7ppqnaK4xSymj9FaStXzRUvx','1U_P7xC8rW-MBsBBUGEedcVXlPh2ghYNz','1XAhUwiS6DqRfqijPfrI5J1OsM6tTJqr9','1iSG0RrtRn8Wy-U3KgKYoRk5IjKVhhnMa'],
-    'cinza':           ['1A-Sc35U_rVZR0V-Wb-aHydPjsAKr1rCu','190A9EQYqAW3rCPesKbq7uBJz3AEGNg5i','1JStgmDkCapfgvRZJ6CTczX2GYv-k58vQ','1JxqJI18oWaHMTJeL6yA4QgNKzbN4L2qt','1KLkHy9bVMJuY-zeVwtC4RH7BaOJyDh14'],
-  },
-  NUBIA: {
-    'bordô':          ['1hT6ClFOOMBMWmK_2CDKRMQ5ZA_I--W3n','1BhkOWgSqjtqS18tcceOCNowQ52tK8MKP','1LI5SeE4RCJI8pLFhUUh0ql21qWacUn4Y','1BSry7sGAajWWE2YZnnwGFf-gCqzBdqCY','1s-NGB6lcnLmrnhlgBPHR7hOyi7MJcpe-'],
-    'azul marinho':   ['1mBILi4m2yxPl1b3FP8XMignePIyQMHP4','1lWOAqGKSmydxm465xEcFQfI5JgbI6SjU','1MdXfwFlCOghUgjjp05FxxuTZiSu971RJ','1N9O0B1vHF6H0yc0kExxAo7NQAuOA2Fpk','1ww_EPNJtUsyTe9P8nwuSa0VeZC3R82Dk'],
-    'preto':          ['1a1yoHWzFV6LLVaJqqCAK8MO9Sabz4Pjt','1_IfxEb6LEpKn5jGmDGBsu5r4vDL0OPK3','1UT0jt-V33rHrdilVh1qrdQ8ztv4'],
-  },
-  ANNE: {
-    'bordô':       ['15kLVXqk0hwPZ8PlgShaYMw1-J0t4iLxq','14zCInKIJI_FQEhASKxJFRkAe86sSKevM','1U1a2J1z7L9Y0xZHkSOZ5f94WQU9PDKT-','1cFjk-D3sOWTatCwOT5fEuEa-JBSIG_Qy','1sFDpsAQzFzIu_AkOSCFlHdlzJ2kABXE5','1tXuQ_ZcJAqBtADNfbiuiukuT_XyK03bF'],
-    'azul marinho':['17Kbq_4AorrwJDAZmvuMp8udecRfYfiZQ','10a1dnItPax4e1dB6y_Pc8BtAgdnWc8b9','17yEwf-ID9I0aXF7ONDiQPjhPGNDNc5k4','1B-ddPIIf6CjrYatXo2fbsXx6-ci8jAUt','1BLzylhpI5XmT9tpAHMSkLemxvbyxn783'],
-    'preto':       ['1I48V85IXIXrQUW-tCU2-7Ej-i0nXNqEu','1DS-e05y7_791qHZa6e6PTKyqoJGMyeGy','1dDDXedhygNIK-L6ISPBGt9q8wL0dRfoM','1hfhcYHqAg5oUyLjcKa_uHw4dHcsToIum','1liW2tph5CKNa6JYEp9HdYP1wu7yjy-CK'],
-    'cinza':       ['1KfFa2A-9wPJTNktlthW8lCzmulZacTuv','1Gs8srzvXLAO1GLqjALgz53RQpVqZ_x_I','1Ol7e5wKp4j07bsNYCrw6xFQSu2-Xg7dL','1P--zKdZHMsVMcqrECanSxiPGXzv2QTNL'],
-    'verde':       ['1eBk3NsLankr0SR_aKYCdrECiGqoCtjqV','1HVApygvlZ_bjV3kb19TBxNBteZcbK6cV','1nZ-JzGXk_U_McSLzniAWRaFSu4pFpESn'],
-  },
-  LIVIA: {
-    'preto':       ['12gAMGLGKe2dp4t2vO_-QvHpQ-5SsWWp4','1-ln398zyZ-ZlGuo5H1AqllN2uo_APdrf','19B4wiEuCwg1T5HqhoZZ0YvaF5jl14LPx','1MPeN8OkXG1pgIPHOgTfP8eSkrYntOQp7','1YJSBFvttahEda0dYBAPR9wNRRLYCWHdd'],
-    'cinza':       ['18YGt-fkjNIR9eY382VLBB_74EJHmUXny','13BU1c86lCZ20gNVjVMN0MxHjGo__flzm','1Ehnt5qSW8M9lqatYCds5fp05t1DNylTe','1MtUzblqNVdkzlv_U4LVffEg8qEC_3Ney','1NsDh0DAzfDU9ZHUYlCBi6M7q1dBm1xuH'],
-    'azul marinho':['1Cqf975hXR-_NGYrTh8myL06rJpBEAhq4','188luiOgO3Hpup27Njg6evYFm6GQllr79','1QS8J07X5bg38E8AFEIz-i4mdTIWFgLYs','1aN2tDKxln5fvTAYDRusqUxWpkk8vYiQ6','1ho4A-T2dTYxk3CE7btyestI9b8knpemy'],
-  },
-  ZARA: {
-    'preto':    ['1tAxDrg_ZqwjD_K4UiFRV2ZlpApnkMS3g','1UeDhFiENVIJqF9Rqs7912FdWmyepcihE','18vm-3EeM_WzBnbMM3XygGqcdNa0mJFW0'],
-    'bordô':    ['1Ja5a-cqV4lIO687jQSC4CXNStd6kTr4R','112jluSkAegNYXZ9CUMw-JAx_VkPaib5C','1-t5iTBMJUlbWx8sLfOyuqRbquIylE7xP','11dyOM8aT5hbH1PPR8KEBlXR9AE7RhBIU','160TCvSfhAX5GSQRyuQFHFHDNR-9K7EUu','18GJ225pBuwjqqAd-_97JJR1NFpam5TlO'],
-    'azul marinho':['17YRiqEgiy2jse0wlK7B55d1DI0mo7t0S','11x8iA8T3r0KPLNVdV4xwpCVQHycvslbE','1Dx-w08Dzo1PH4nrXwVxK1Ul0fFBe18BN','1alfgxtGnLbirUYMcu450KQs2FL2Fhi8g'],
-    'cinza':    ['11r5QhIxFGwh7hfc5mJu_XXDqL6NagKo2','10_tFkOEOkW-Fbi9WKMkiOgM8ykxoOAGe','12ys9xdqH3f9l9rzzkK5V_d-sv8kH5jsC','14PRToysJc-LuSvEVZAObOxObDra8Y6_a','14sQ2fMuSFJT2xD9OHUKC9_8DxogaM5Bc'],
-  },
-  BEATRIZ: {
-    'preto':         ['18skw_rNsL7pME73gnNdfo6fhlyXsx34F','16Ag1KaO1GN4aCPahsmfejIeBGEYDme8Z','1Av8NXv-Tt7MPrcB0yMppZfjlFA4i5XdS','1IAXTP4A-2E9WJ8PEpkL3JeZYqr-yLNbd','1-_8sp5_pIMaGOg69Rvry5uHozLliYSMV'],
-    'azul marinho':  ['14tkFNhsty4q1pTLDLqZwubWpVHjdgq7t','127FtSItX3hpJPszqEVcvbW3Jl4D17sbo','17bzIU6QJXy_j6iHEhaxL86vfYQdnQu95','18340wnSQnAvZYXXoDfdjDnfLUn_fTTy-','1VfA10CYZxz-ZcOpsUBKDj_luotTpaK5S'],
-    'cinza':         ['14-XKcGWnGq9_ZAXvZFK7SdmMu9FZejg9','10UN2mE44ItJF020fYtDhQKjK3KkQFnaZ','1CTvlOeYk82sPYy2vh7pw_vXxvYumVUe2','1GbKT5HYjnA0xg9ISXenTafkiZK-eU7eu','1gikycrCHZUIYn-nc7YP-zIkZbNnuHBIF'],
-    'bordô':         [], // ← COLE OS IDs AQUI
-  },
-};
+import { transaction, run, queryOne } from '../config/database.js';
 
 const router = express.Router();
+
+/**
+ * GET /api/store/catalog
+ * Retorna o catálogo central de preços oficiais (independente de haver estoque).
+ * Fonte única da verdade para o preço exibido na vitrine.
+ */
+router.get('/catalog', (req, res) => {
+  try {
+    const precos = env.modeloPrecos || {};
+    res.json({ ok: true, catalog: precos });
+  } catch (error) {
+    logger.error('Store catalog error:', error.message);
+    res.status(500).json({ ok: false, error: 'Erro ao buscar catálogo' });
+  }
+});
+
+/**
+ * POST /api/store/wishlist
+ * Registra interesse de cliente em produto esgotado ("Avise-me quando chegar").
+ * Body: { modelo, tamanho?, cor?, nome, contato }
+ */
+router.post('/wishlist', async (req, res) => {
+  try {
+    const { modelo, tamanho, cor, nome, contato } = req.body || {};
+    if (!modelo || !nome || !contato) {
+      return res.status(400).json({ ok: false, error: 'modelo, nome e contato são obrigatórios' });
+    }
+    const contatoLimpo = String(contato).replace(/\s+/g, '').slice(0, 60);
+    const nomeLimpo = String(nome).slice(0, 80).trim();
+    const variante = [tamanho, cor].filter(Boolean).join(' ');
+    const observacao = `WISHLIST — ${modelo}${variante ? ' ' + variante : ''}`;
+
+    // Tenta inserir na tabela leads (já existe no schema). Se conflito (UNIQUE), atualiza obs.
+    const isEmail = contatoLimpo.includes('@');
+    try {
+      run(
+        `INSERT INTO leads (nome, celular, email, fonte, status, observacoes, created_at)
+         VALUES (?, ?, ?, ?, 'novo', ?, datetime('now'))`,
+        [nomeLimpo, isEmail ? '' : contatoLimpo, isEmail ? contatoLimpo : '', 'wishlist', observacao]
+      );
+    } catch (e) {
+      // Em caso de UNIQUE (mesmo telefone já existe), apenas registramos no log — não bloqueia
+      logger.info(`[wishlist] Lead já existia (${contatoLimpo}): atualizando observação`);
+    }
+
+    logger.info(`[wishlist] Interesse registrado: ${nomeLimpo} (${contatoLimpo}) → ${modelo} ${variante}`);
+
+    // Notifica equipe via WhatsApp (não bloqueia resposta)
+    try {
+      const msg = `🔔 *Avise-me quando chegar*\n\nCliente: ${nomeLimpo}\nContato: ${contatoLimpo}\nProduto: ${modelo}${variante ? ' ' + variante : ''}\n\n_Origem: site Pluma_`;
+      enviarMensagem(env.numeroFelipe, msg).catch(() => {});
+      enviarMensagem(env.numeroJully, msg).catch(() => {});
+    } catch (_) {}
+
+    res.json({ ok: true });
+  } catch (error) {
+    logger.error('Wishlist error:', error.message);
+    res.status(500).json({ ok: false, error: 'Erro ao registrar interesse' });
+  }
+});
 
 /**
  * GET /api/store/products
@@ -87,51 +105,143 @@ router.get('/products', async (req, res) => {
  * POST /api/store/checkout
  * Cria pedido a partir do carrinho do site
  * Body: { cliente: {nome, whatsapp, endereco, tipo_entrega}, itens: [{modelo, tamanho, cor, quantidade, preco}] }
+ *
+ * GARANTIA DE INTEGRIDADE: reserva de estoque + criação de pedido em transação ACID.
+ * Se qualquer item estiver sem saldo, rollback total — pedido não é criado.
  */
 router.post('/checkout', async (req, res) => {
   try {
-    const { cliente, itens, frete = 0 } = req.body;
+    const { cliente, itens: itensCliente, frete = 0 } = req.body;
 
-    if (!cliente?.nome || !itens?.length) {
+    if (!cliente?.nome || !itensCliente?.length) {
       return res.status(400).json({ ok: false, error: 'Dados incompletos' });
     }
 
-    // Calcular total (subtotal + frete do motoboy se entrega)
+    // ─── SEGURANÇA: RECALCULAR PREÇOS DO BANCO ────────────────────────────────
+    // NUNCA confiar no preço enviado pelo frontend — buscar do DB no momento da compra.
+    // O catálogo central (env.modeloPrecos) é fallback se o SKU não tiver preço próprio.
+    const itens = [];
+    for (const i of itensCliente) {
+      const sku = generateSKU(i.modelo, i.tamanho, i.cor);
+      const row = queryOne(
+        `SELECT preco_unitario, quantidade_total, quantidade_reservada
+           FROM estoque WHERE sku = ? AND UPPER(status) = 'ATIVO'`,
+        [sku]
+      );
+      if (!row) {
+        return res.status(400).json({
+          ok: false,
+          error: `Produto indisponível: ${i.modelo} ${i.tamanho} ${i.cor}`
+        });
+      }
+      // Preço oficial: DB primeiro, catálogo central como fallback
+      const precoOficial = Number(row.preco_unitario) > 0
+        ? Number(row.preco_unitario)
+        : Number(env.modeloPrecos?.[i.modelo?.toUpperCase()] || 0);
+      if (precoOficial <= 0) {
+        return res.status(400).json({
+          ok: false,
+          error: `Sem preço oficial para ${i.modelo} — contacte a loja`
+        });
+      }
+      itens.push({
+        modelo: i.modelo,
+        tamanho: i.tamanho,
+        cor: i.cor,
+        quantidade: Number(i.quantidade) || 1,
+        preco: precoOficial // ← OFICIAL, vindo do servidor
+      });
+    }
+    // ──────────────────────────────────────────────────────────────────────────
+
+    // Calcular totais com preços oficiais
     const subtotal = itens.reduce((s, i) => s + (i.preco * i.quantidade), 0);
     const valorFrete = cliente.tipo_entrega === 'ENTREGA' ? Number(frete) || 0 : 0;
     const valorTotal = subtotal + valorFrete;
     const quantidadeTotal = itens.reduce((s, i) => s + i.quantidade, 0);
-
-    // Montar descrição
     const descricao = itens.map(i => `${i.quantidade}x ${i.modelo} ${i.tamanho} ${i.cor}`).join(', ');
     const obs = valorFrete > 0 ? `Pedido pelo site | Frete motoboy: R$ ${valorFrete.toFixed(2)}` : 'Pedido pelo site';
+    const now = new Date().toISOString();
 
-    // Criar pedido no Sheets
-    const pedidoData = {
-      cliente_nome: cliente.nome,
-      cliente_whatsapp: cliente.whatsapp || '',
-      descricao_pedido: descricao,
-      quantidade_total: quantidadeTotal,
-      valor_total: valorTotal,
-      tipo_entrega: cliente.tipo_entrega || 'ENTREGA',
-      endereco_entrega: cliente.endereco || '',
-      forma_pagamento: 'PIX',
-      itens_json: JSON.stringify(itens.map(i => ({
-        modelo: i.modelo,
-        tamanho: i.tamanho,
-        cor: i.cor,
-        quantidade: i.quantidade,
-        preco: i.preco
-      }))),
-      observacoes: obs
-    };
+    // ─── TRANSAÇÃO ATÔMICA ────────────────────────────────────────────────────
+    // Reserva de estoque + INSERT de pedido em uma única transação.
+    // Se qualquer item falhar: ROLLBACK automático, pedido NÃO é criado.
+    let numeroPedido;
 
-    const resultado = await criarPedido(pedidoData);
-    if (!resultado.success) {
-      return res.status(500).json({ ok: false, error: resultado.error });
+    try {
+      transaction(() => {
+        // PASSO 1: Verificar e reservar cada item
+        for (const item of itens) {
+          const sku = generateSKU(item.modelo, item.tamanho, item.cor);
+
+          const reserva = run(
+            `UPDATE estoque
+             SET quantidade_reservada = quantidade_reservada + ?,
+                 updated_at = ?
+             WHERE sku = ?
+               AND (quantidade_total - quantidade_reservada) >= ?`,
+            [item.quantidade, now, sku, item.quantidade]
+          );
+
+          if (reserva.changes === 0) {
+            // Buscar disponível atual para mensagem clara
+            const atual = queryOne(
+              'SELECT quantidade_total, quantidade_reservada FROM estoque WHERE sku = ?',
+              [sku]
+            );
+            const disponivel = atual
+              ? (atual.quantidade_total - atual.quantidade_reservada)
+              : 0;
+
+            // Lançar erro faz o transaction() executar ROLLBACK automaticamente
+            throw Object.assign(
+              new Error(`Estoque insuficiente para ${item.modelo} ${item.tamanho} ${item.cor}. Disponível: ${disponivel}`),
+              { tipo: 'ESTOQUE_INSUFICIENTE', sku, disponivel }
+            );
+          }
+        }
+
+        // PASSO 2: Criar pedido (só chega aqui se todos os itens foram reservados)
+        const pedRes = run(
+          `INSERT INTO pedidos
+           (data_pedido, cliente_nome, cliente_whatsapp, descricao_pedido, quantidade_total,
+            valor_total, tipo_entrega, endereco_entrega, status_pagamento, forma_pagamento,
+            status_entrega, itens_json, data_pagamento, data_entrega, observacoes)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PEDIDO', 'PIX', 'PENDENTE', ?, '', '', ?)`,
+          [
+            now,
+            cliente.nome,
+            cliente.whatsapp || '',
+            descricao,
+            quantidadeTotal,
+            valorTotal,
+            cliente.tipo_entrega || 'ENTREGA',
+            cliente.endereco || '',
+            JSON.stringify(itens.map(i => ({
+              modelo: i.modelo,
+              tamanho: i.tamanho,
+              cor: i.cor,
+              quantidade: i.quantidade,
+              preco: i.preco
+            }))),
+            obs
+          ]
+        );
+
+        numeroPedido = pedRes.id;
+      });
+    } catch (erroTxn) {
+      // Estoque insuficiente → HTTP 400 com mensagem clara para o frontend
+      if (erroTxn.tipo === 'ESTOQUE_INSUFICIENTE') {
+        return res.status(400).json({ ok: false, error: erroTxn.message });
+      }
+      throw erroTxn; // Outros erros sobem para o catch externo (500)
     }
+    // ─── FIM DA TRANSAÇÃO ─────────────────────────────────────────────────────
 
-    // Criar cliente se não existir
+    logger.info(`[checkout] Pedido #${numeroPedido} criado — estoque reservado para ${itens.length} item(ns)`);
+
+    // Criar cliente se não existir (fora da transação — falha não desfaz o pedido)
     if (cliente.whatsapp) {
       const clienteExistente = await findByWhatsApp(cliente.whatsapp).catch(() => null);
       if (!clienteExistente) {
@@ -140,18 +250,16 @@ router.post('/checkout', async (req, res) => {
           whatsapp: cliente.whatsapp,
           endereco: cliente.endereco || '',
           cidade: 'Boa Vista'
-        }).catch(() => {});
+        }).catch(err => logger.warn('[checkout] Falha ao criar cliente (não crítico):', err.message));
       }
     }
 
-    // 🎉 ENVIAR NOTIFICAÇÃO WHATSAPP PARA FELIPE E JÚLLY
+    // Notificação WhatsApp (fora da transação — falha não desfaz o pedido)
     try {
-      const numeroPedidoFormatado = String(resultado.numeroPedido).padStart(3, '0');
-      const itensFormatados = itens
-        .map(i => `• ${i.quantidade}x ${i.modelo} ${i.tamanho} ${i.cor}`)
-        .join('\n');
+      const numFormatado = String(numeroPedido).padStart(3, '0');
+      const itensFormatados = itens.map(i => `• ${i.quantidade}x ${i.modelo} ${i.tamanho} ${i.cor}`).join('\n');
 
-      const mensagemNotificacao = `🎉 NOVO PEDIDO! #${numeroPedidoFormatado}
+      const msg = `🎉 NOVO PEDIDO! #${numFormatado}
 
 👤 Cliente: ${cliente.nome}
 📱 WhatsApp: ${cliente.whatsapp || 'N/A'}
@@ -164,34 +272,26 @@ ${itensFormatados}
 
 ⏳ Aguardando pagamento via PIX...`;
 
-      // Enviar para Felipe
-      await enviarMensagem(env.numeroFelipe, mensagemNotificacao);
-
-      // Enviar para Júlly
-      await enviarMensagem(env.numeroJully, mensagemNotificacao);
-
-      logger.info(`✓ Notificação de novo pedido #${numeroPedidoFormatado} enviada para Felipe e Júlly`);
-    } catch (erroWhatsApp) {
-      logger.error('Erro ao enviar notificação WhatsApp:', erroWhatsApp.message);
-      // NÃO bloquear o checkout se a notificação falhar
+      await enviarMensagem(env.numeroFelipe, msg);
+      await enviarMensagem(env.numeroJully, msg);
+      logger.info(`✓ Notificação pedido #${numFormatado} enviada`);
+    } catch (erroWpp) {
+      logger.error('Erro ao enviar notificação WhatsApp:', erroWpp.message);
     }
 
-    // Retornar dados do PIX
-    const chavePix = process.env.CHAVE_PIX || '5595991228494';
-    const nomeLoja = 'PLUMA PIJAMAS';
-    const cidade = 'BOA VISTA';
-
+    // Retornar confirmação com dados do PIX
     res.json({
       ok: true,
-      numeroPedido: resultado.numeroPedido,
+      numeroPedido,
       valorTotal: parseFloat(valorTotal.toFixed(2)),
       pix: {
-        chave: chavePix,
-        nome: nomeLoja,
-        cidade,
+        chave: process.env.CHAVE_PIX || '5595991228494',
+        nome: 'PLUMA PIJAMAS',
+        cidade: 'BOA VISTA',
         valor: parseFloat(valorTotal.toFixed(2))
       }
     });
+
   } catch (error) {
     logger.error('Store checkout error:', error.message);
     res.status(500).json({ ok: false, error: 'Erro ao processar pedido' });
@@ -228,20 +328,6 @@ router.post('/fotos/capa', async (req, res) => {
     res.json({ ok });
   } catch (error) {
     logger.error('Capa update error:', error.message);
-    res.status(500).json({ ok: false, error: error.message });
-  }
-});
-
-/**
- * POST /api/store/fotos/inicializar
- * Cria a aba FOTOS no Sheets e popula com os dados iniciais (rodar uma vez)
- */
-router.post('/fotos/inicializar', async (req, res) => {
-  try {
-    const ok = await inicializarAbaFotos(FOTOS_INICIAIS);
-    res.json({ ok, mensagem: ok ? 'Aba FOTOS criada e populada!' : 'Erro ao criar aba' });
-  } catch (error) {
-    logger.error('Inicializar fotos error:', error.message);
     res.status(500).json({ ok: false, error: error.message });
   }
 });

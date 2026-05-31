@@ -173,14 +173,15 @@ async function apiFetch(path, options = {}) {
       headers
     });
 
-    if (response.status === 403) {
+    if (response.status === 401 || response.status === 403) {
       logout();
       return null;
     }
 
     if (!response.ok) {
-      const error = await response.json();
-      showToast(`Erro: ${error.mensagem || 'Operação falhou'}`, 'error');
+      let errorMsg = 'Operação falhou';
+      try { const error = await response.json(); errorMsg = error.error || error.mensagem || errorMsg; } catch(_) {}
+      showToast(`Erro: ${errorMsg}`, 'error');
       return null;
     }
 
@@ -197,7 +198,7 @@ async function apiFetch(path, options = {}) {
 // ========================================
 
 async function loadDashboard() {
-  const data = await apiFetch('/stats');
+  const data = await apiFetch('/dashboard/stats');
   if (!data) return;
 
   renderDashboardCards(data);
@@ -286,10 +287,11 @@ function renderSalesChart(graphData = []) {
 async function loadEstoque() {
   const search = document.getElementById('estoqueSearch')?.value || '';
   const data = await apiFetch(`/estoque${search ? `?search=${encodeURIComponent(search)}` : ''}`);
-  
-  if (!data || !Array.isArray(data)) return;
 
-  const html = data.map(item => `
+  if (!data) return;
+  const estoqueArr = Array.isArray(data) ? data : (data.estoque || []);
+
+  const html = estoqueArr.map(item => `
     <tr>
       <td>${item.sku}</td>
       <td>${item.modelo}</td>
@@ -342,19 +344,22 @@ async function loadPedidos() {
   if (search) url += `&busca=${encodeURIComponent(search)}`;
 
   const data = await apiFetch(url);
-  if (!data || !Array.isArray(data)) return;
+  if (!data) return;
+  const pedidosArr = Array.isArray(data) ? data : (data.pedidos || []);
 
-  const html = data.map(pedido => `
+  const html = pedidosArr.map(pedido => `
     <tr>
       <td>#${pedido.numero_pedido}</td>
       <td>${pedido.cliente_nome}</td>
-      <td>${pedido.cliente_whatsapp}</td>
+      <td>${pedido.cliente_whatsapp || '—'}</td>
       <td>R$ ${(pedido.valor_total || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
       <td><span class="badge ${pedido.status_pagamento === 'PAGO' ? 'badge-success' : 'badge-warning'}">${pedido.status_pagamento}</span></td>
       <td><span class="badge ${pedido.status_entrega === 'ENTREGUE' ? 'badge-success' : 'badge-warning'}">${pedido.status_entrega}</span></td>
-      <td>${new Date(pedido.data_pedido).toLocaleDateString('pt-BR')}</td>
-      <td>
-        <button class="btn btn-primary btn-small" onclick="abrirPedido(${pedido.numero_pedido})">Ver</button>
+      <td>${pedido.data_pedido ? new Date(pedido.data_pedido).toLocaleDateString('pt-BR') : '—'}</td>
+      <td style="display:flex;gap:4px;flex-wrap:wrap">
+        <button class="btn btn-primary btn-small" onclick="abrirPedido(${pedido.numero_pedido})" title="Ver detalhes">👁 Ver</button>
+        <button class="btn btn-small" style="background:#f59e0b;color:#fff" onclick="editarStatusPedido(${pedido.numero_pedido},'${pedido.status_pagamento}','${pedido.status_entrega}')" title="Editar status">✏️ Status</button>
+        <button class="btn btn-small" style="background:#ef4444;color:#fff" onclick="excluirPedido(${pedido.numero_pedido})" title="Excluir pedido">🗑 Excluir</button>
       </td>
     </tr>
   `).join('');
@@ -362,12 +367,86 @@ async function loadPedidos() {
   document.getElementById('pedidosTable').querySelector('tbody').innerHTML = html;
 }
 
+async function excluirPedido(numero) {
+  if (!confirm(`Tem certeza que deseja apagar o Pedido #${numero}?\nEsta ação não pode ser desfeita.`)) return;
+
+  const result = await apiFetch(`/pedidos/${numero}`, { method: 'DELETE' });
+  if (result) {
+    showToast(`Pedido #${numero} excluído com sucesso`, 'success');
+    loadPedidos();
+  }
+}
+
+async function editarStatusPedido(numero, statusPagAtual, statusEntregaAtual) {
+  const PAGAMENTOS = ['PEDIDO', 'PAGO', 'CANCELADO'];
+  const ENTREGAS   = ['PENDENTE', 'EM_TRANSITO', 'ENTREGUE', 'RETIRADA_NA_LOJA', 'CANCELADO'];
+
+  // Modal inline simples
+  const modalId = 'statusModal';
+  document.getElementById(modalId)?.remove();
+
+  const modal = document.createElement('div');
+  modal.id = modalId;
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center';
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:12px;padding:28px;max-width:380px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,.2)">
+      <h3 style="margin:0 0 20px;font-size:16px;color:#1a1a1a">✏️ Editar Status — Pedido #${numero}</h3>
+
+      <label style="font-size:12px;font-weight:600;color:#555;letter-spacing:.04em;text-transform:uppercase">Status de Pagamento</label>
+      <select id="selPagto" style="width:100%;padding:10px;border:1.5px solid #ddd;border-radius:8px;margin:6px 0 16px;font-size:14px">
+        ${PAGAMENTOS.map(s => `<option value="${s}" ${s === statusPagAtual ? 'selected' : ''}>${s}</option>`).join('')}
+      </select>
+
+      <label style="font-size:12px;font-weight:600;color:#555;letter-spacing:.04em;text-transform:uppercase">Status de Entrega</label>
+      <select id="selEntrega" style="width:100%;padding:10px;border:1.5px solid #ddd;border-radius:8px;margin:6px 0 24px;font-size:14px">
+        ${ENTREGAS.map(s => `<option value="${s}" ${s === statusEntregaAtual ? 'selected' : ''}>${s}</option>`).join('')}
+      </select>
+
+      <div style="display:flex;gap:10px">
+        <button onclick="document.getElementById('${modalId}').remove()"
+          style="flex:1;padding:10px;border:1.5px solid #ddd;border-radius:8px;background:#fff;cursor:pointer;font-size:14px">
+          Cancelar
+        </button>
+        <button onclick="salvarStatusPedido(${numero})"
+          style="flex:1;padding:10px;background:#e75480;color:#fff;border:none;border-radius:8px;cursor:pointer;font-size:14px;font-weight:600">
+          Salvar
+        </button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+}
+
+async function salvarStatusPedido(numero) {
+  const status_pagamento = document.getElementById('selPagto')?.value;
+  const status_entrega   = document.getElementById('selEntrega')?.value;
+
+  const result = await apiFetch(`/pedidos/${numero}/status`, {
+    method: 'PUT',
+    body: JSON.stringify({ status_pagamento, status_entrega })
+  });
+
+  if (result) {
+    document.getElementById('statusModal')?.remove();
+    showToast(`Pedido #${numero} atualizado!`, 'success');
+    loadPedidos();
+  }
+}
+
 async function abrirPedido(numero) {
-  const data = await apiFetch(`/pedidos/${numero}`);
-  if (!data) return;
+  const resp = await apiFetch(`/pedidos/${numero}`);
+  if (!resp) return;
+  const data = resp.pedido || resp;
 
   currentPedidoNumber = numero;
-  const itemsHtml = (data.itens_json || []).map(item => `
+  // data.itens = array parseado pelo backend; data.itens_json = string bruta (não usar .map aqui)
+  let itensArr = [];
+  if (Array.isArray(data.itens)) {
+    itensArr = data.itens;
+  } else {
+    try { itensArr = JSON.parse(data.itens_json || '[]'); } catch(_) { itensArr = []; }
+  }
+  const itemsHtml = itensArr.map(item => `
     <div><strong>${item.quantidade}x</strong> ${item.modelo} ${item.tamanho} ${item.cor} - R$ ${(item.preco || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
   `).join('');
 

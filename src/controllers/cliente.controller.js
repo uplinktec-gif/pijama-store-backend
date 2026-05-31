@@ -4,7 +4,7 @@ import { buscarClientePorCPF, obterClientePorId } from '../services/sqlite/clien
 import { buscarPedidosPorCliente, buscarPedidosPorWhatsApp } from '../services/sqlite/pedidos.js';
 import { salvarMensagemSuporte } from '../services/sqlite/suporte.js';
 import { enviarMensagem } from '../services/whatsapp/sender.js';
-import { callAI } from '../config/gemini.js';
+import { callAI } from '../config/claude.js';
 
 /**
  * POST /api/cliente/autenticar

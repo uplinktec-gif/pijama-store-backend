@@ -4,6 +4,9 @@ import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import session from 'express-session';
 import passport from 'passport';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
+import { env } from './config/env.js';
 import { logger } from './utils/logger.js';
 import { configurarGoogleOAuth } from './config/google-oauth.js';
 import { registrarRotasMonitor } from './services/monitor/evolution-monitor.js';
@@ -17,11 +20,69 @@ import clienteRoutes from './routes/cliente.routes.js';
 import authRoutes from './routes/auth.routes.js';
 import webhookReceiverRoutes from './routes/webhook-receiver.routes.js';
 import sseRoutes from './routes/sse.routes.js';
+import aiDashboardRoutes from './routes/ai-dashboard.routes.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const app = express();
+
+// Atrás do Caddy (reverse proxy) — confia no primeiro hop para ler o IP real
+// (X-Forwarded-For). Necessário para o rate-limit funcionar por IP de verdade.
+app.set('trust proxy', 1);
+
+// ─── Helmet: headers de segurança ────────────────────────────────────────────
+// CSP/COEP/CORP desligados de propósito: a loja usa scripts inline + CDNs
+// (marked.js, jsPDF) e imagens externas (googleusercontent). Mantém os demais
+// headers úteis (nosniff, X-Frame-Options, HSTS, oculta X-Powered-By).
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false,
+  crossOriginResourcePolicy: false
+}));
+
+// ─── Rate limiters ───────────────────────────────────────────────────────────
+// Limitador GLOBAL leve para a API pública (anti-DDoS básico). Não conta:
+//  - webhook do WhatsApp (Evolution faz bursts legítimos, já protegido por secret)
+//  - SSE (conexões longas)
+const globalLimiter = rateLimit({
+  windowMs: 60 * 1000,        // 1 minuto
+  max: 300,                   // 300 req/min por IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Muitas requisições. Tente novamente em instantes.' },
+  skip: (req) =>
+    req.path.startsWith('/api/webhook/whatsapp') ||
+    req.path.startsWith('/api/sse')
+});
+
+// Limitador SEVERO exclusivo do login admin (anti-brute-force)
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,   // 15 minutos
+  max: 5,                     // 5 tentativas por IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: true, // só conta tentativas que falharam
+  message: { sucesso: false, mensagem: 'Muitas tentativas de login. Aguarde 15 minutos.' }
+});
+
+// ─── Validação do webhook WhatsApp ───────────────────────────────────────────
+// A Evolution envia um header secreto. Sem o header correto → 403.
+// Fail-open SE o secret não estiver configurado (evita derrubar o bot por
+// esquecimento) — mas registra aviso para não passar despercebido.
+function validarSegredoWebhook(req, res, next) {
+  const segredo = env.evolutionWebhookSecret;
+  if (!segredo) {
+    logger.warn('[webhook] ⚠️ EVOLUTION_WEBHOOK_SECRET não configurado — validação desativada (fail-open)');
+    return next();
+  }
+  const recebido = req.headers['x-webhook-secret'] || req.headers['apikey'] || '';
+  if (recebido !== segredo) {
+    logger.warn(`[webhook] ❌ Segredo inválido/ausente — requisição rejeitada (IP: ${req.ip})`);
+    return res.status(403).json({ error: 'Acesso negado' });
+  }
+  next();
+}
 
 // Configurar Google OAuth
 configurarGoogleOAuth();
@@ -113,18 +174,19 @@ if (process.env.NODE_ENV !== 'production') {
   });
 }
 
-// WhatsApp webhook
-app.post('/api/webhook/whatsapp', webhookController.receberMensagem);
+// WhatsApp webhook — POST validado por segredo (Evolution envia no header)
+app.post('/api/webhook/whatsapp', validarSegredoWebhook, webhookController.receberMensagem);
 app.get('/api/webhook/whatsapp', webhookController.verificarWebhook);
 
-// Autenticação (CPF e Google OAuth)
-app.use('/auth', authRoutes);
+// Autenticação (CPF, OTP WhatsApp e Google OAuth)
+app.use('/auth', authRoutes);        // ex: POST /auth/cliente/login
+app.use('/api/auth', authRoutes);    // ex: POST /api/auth/iniciar (OTP frictionless)
 
 // Webhook Receiver (sincronização de estoque em tempo real)
 app.use('/webhooks', webhookReceiverRoutes);
 
-// API routes
-app.use('/api', apiRoutes);
+// API routes — com limitador global anti-DDoS (webhook e SSE isentos via skip)
+app.use('/api', globalLimiter, apiRoutes);
 
 // Server-Sent Events (SSE) para atualizações em tempo real
 app.use('/api/sse', sseRoutes);
@@ -135,9 +197,11 @@ app.use('/api/cliente', clienteRoutes);
 // Dashboard simples
 app.use('/dashboard', dashboardRoutes);
 
-// Painel Admin completo
+// Painel Admin completo — login com limitador severo anti-brute-force
+app.use('/admin/api/auth/login', loginLimiter);
 app.use('/admin/api', adminRoutes);
 app.use('/admin/api/webhooks', webhooksRoutes);
+app.use('/api/ai-dashboard', aiDashboardRoutes);
 app.use('/admin', express.static(`${dirname(__dirname)}/public/admin`));
 app.get('/admin', (req, res) => res.sendFile(`${dirname(__dirname)}/public/admin/index.html`));
 

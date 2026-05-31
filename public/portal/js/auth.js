@@ -1,13 +1,23 @@
-// Authentication logic for Portal do Cliente
+// Authentication logic for Portal do Cliente (Session-based)
 
-// Check if user is already authenticated
-function verificarAutenticacao() {
-  if (validarToken()) {
-    // User already authenticated, go to dashboard
-    mostrarDashboard();
-    return;
+// Check if user is already authenticated by attempting to fetch dashboard
+async function verificarAutenticacao() {
+  try {
+    const response = await fetch('/api/store/user', {
+      method: 'GET',
+      credentials: 'include'
+    });
+
+    if (response.ok) {
+      const user = await response.json();
+      mostrarDashboard(user);
+    } else {
+      mostrarLogin();
+    }
+  } catch (error) {
+    console.error('Erro ao verificar autenticação:', error);
+    mostrarLogin();
   }
-  mostrarLogin();
 }
 
 // Render login form
@@ -23,12 +33,12 @@ function mostrarLogin() {
 
       <form id="loginForm">
         <div class="form-group">
-          <label for="cpf">CPF</label>
+          <label for="email">Email</label>
           <input
             type="text"
-            id="cpf"
-            name="cpf"
-            placeholder="000.000.000-00"
+            id="email"
+            name="email"
+            placeholder="seu@email.com"
             required
             autocomplete="off"
           >
@@ -40,30 +50,12 @@ function mostrarLogin() {
       </form>
 
       <p class="confirmation-text">
-        Digite seu CPF para acessar seu histórico de pedidos e recomendações personalizadas.
+        Digite seu email para acessar seu histórico de pedidos e recomendações personalizadas.
       </p>
     </div>
   `;
 
   const form = document.getElementById('loginForm');
-  const cpfInput = document.getElementById('cpf');
-
-  // Format CPF input as user types
-  cpfInput.addEventListener('input', (e) => {
-    let value = e.target.value.replace(/\D/g, '');
-    if (value.length <= 11) {
-      if (value.length <= 3) {
-        e.target.value = value;
-      } else if (value.length <= 6) {
-        e.target.value = value.slice(0, 3) + '.' + value.slice(3);
-      } else if (value.length <= 9) {
-        e.target.value = value.slice(0, 3) + '.' + value.slice(3, 6) + '.' + value.slice(6);
-      } else {
-        e.target.value = value.slice(0, 3) + '.' + value.slice(3, 6) + '.' + value.slice(6, 9) + '-' + value.slice(9, 11);
-      }
-    }
-  });
-
   form.addEventListener('submit', (e) => {
     e.preventDefault();
     executarLogin();
@@ -72,16 +64,16 @@ function mostrarLogin() {
 
 // Handle login
 async function executarLogin() {
-  const cpfInput = document.getElementById('cpf');
+  const emailInput = document.getElementById('email');
   const errorDiv = document.getElementById('errorMessage');
-  const cpf = cpfInput.value.replace(/\D/g, '');
+  const email = emailInput.value.trim();
 
   errorDiv.classList.remove('show');
   errorDiv.textContent = '';
 
-  // Validate CPF
-  if (!validarCPF(cpf)) {
-    mostrarErroLogin('CPF inválido. Digite um CPF com 11 dígitos.');
+  // Validate email is not empty
+  if (!email) {
+    mostrarErroLogin('Por favor, digite seu email.');
     return;
   }
 
@@ -91,66 +83,34 @@ async function executarLogin() {
   btn.textContent = 'Autenticando...';
 
   try {
-    const response = await fazerRequisicao('/api/cliente/autenticar', {
+    const response = await fetch('/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ cpf })
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      credentials: 'include',
+      body: JSON.stringify({ cpf: email })
     });
 
-    if (!response) {
-      throw new Error('Erro ao autenticar');
-    }
+    const data = await response.json();
 
-    if (!response.sucesso) {
-      mostrarErroLogin(response.mensagem || 'Erro ao autenticar');
+    if (!response.ok || !data.success) {
+      mostrarErroLogin(data.error || 'Email não encontrado.');
       btn.disabled = false;
       btn.textContent = 'Acessar Portal';
       return;
     }
 
-    // Store token and client info
-    salvarToken(response.token);
-    salvarInfoCliente(response.id_cliente, response.nome);
-
-    // Show confirmation with last 2 CPF digits
-    mostrarConfirmacaoIdentidade(response.nome, response.ultimos_dois_cpf);
+    // Success - navigate to portal
+    setTimeout(() => {
+      window.location.href = data.redirect || '/portal/dashboard';
+    }, 500);
   } catch (erro) {
     console.error('Erro no login:', erro);
-    mostrarErroLogin(erro.message || 'Erro ao conectar. Tente novamente.');
+    mostrarErroLogin('Erro ao conectar. Tente novamente.');
     btn.disabled = false;
     btn.textContent = 'Acessar Portal';
   }
-}
-
-// Show identity confirmation
-function mostrarConfirmacaoIdentidade(nome, ultimosDoisDigitos) {
-  const app = document.getElementById('app');
-
-  app.innerHTML = `
-    <div class="login-container">
-      <h1>Confirme sua Identidade</h1>
-      <p class="confirmation-text">
-        Olá, <strong>${nome}!</strong><br><br>
-        Para segurança, confirme que você é o titular da conta.<br><br>
-        <strong>Últimos 2 dígitos do CPF: ${ultimosDoisDigitos}</strong>
-      </p>
-
-      <button id="confirmarBtn" class="login-btn">
-        Sim, é meu CPF
-      </button>
-      <button id="cancelarBtn" class="login-btn" style="background: white; color: #e75480; border: 2px solid #e75480; margin-top: 10px;">
-        Cancelar
-      </button>
-    </div>
-  `;
-
-  document.getElementById('confirmarBtn').addEventListener('click', () => {
-    mostrarDashboard();
-  });
-
-  document.getElementById('cancelarBtn').addEventListener('click', () => {
-    limparToken();
-    mostrarLogin();
-  });
 }
 
 // Show error message in login form
@@ -163,9 +123,16 @@ function mostrarErroLogin(mensagem) {
 }
 
 // Logout
-function fazerLogout() {
-  limparToken();
-  verificarAutenticacao();
+async function fazerLogout() {
+  try {
+    await fetch('/auth/logout', {
+      method: 'POST',
+      credentials: 'include'
+    });
+  } catch (error) {
+    console.error('Erro ao fazer logout:', error);
+  }
+  window.location.href = '/portal';
 }
 
 // Initialize app

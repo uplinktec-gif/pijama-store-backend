@@ -9,9 +9,9 @@ import { logger } from '../../utils/logger.js';
 export function generateSKU(modelo, tamanho, cor) {
   // "Azul Jeans" é cor legítima — manter "jeans". Sanitizar apenas alucinações.
   const corSanitized = (cor || '')
-    .replace(/\s+marinho/ig, '')
-    .replace(/\s+escuro/ig, '')
-    .replace(/\s+claro/ig, '')
+    .replace(/[\s-]+marinho/ig, '')
+    .replace(/[\s-]+escuro/ig, '')
+    .replace(/[\s-]+claro/ig, '')
     .replace(/\s+com\s+\w+/ig, '')
     .trim();
   const corNorm = corSanitized.toUpperCase().replace(/\s+/g, '_');

@@ -28,6 +28,10 @@ const env = {
 
   // WhatsApp Webhook
   whatsappVerifyToken: process.env.WHATSAPP_VERIFY_TOKEN,
+  // Segredo que a Evolution envia no header para autenticar o webhook.
+  // Se vazio, a validação roda em modo "fail-open" (não bloqueia) — evita
+  // derrubar o bot por esquecimento de configuração.
+  evolutionWebhookSecret: process.env.EVOLUTION_WEBHOOK_SECRET || '',
 
   // Claude API
   anthropicApiKey: process.env.ANTHROPIC_API_KEY,

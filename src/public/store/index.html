@@ -235,7 +235,7 @@ footer strong { color: white; }
   .hero { padding: 40px 20px 35px; }
 }
 </style>
-<link rel="stylesheet" href="/css/auth-modal.css?v=20260521f">
+<link rel="stylesheet" href="/css/auth-modal.css?v=20260527otp">
 </head>
 <body>
 
@@ -466,7 +466,13 @@ footer strong { color: white; }
    PRODUCT CATALOG
    ========================================================= */
 const WHATS_NUM = '5595991268494';
-const GDR = (id, sz='w800') => `https://lh3.googleusercontent.com/d/${id}=${sz}`;
+// GDR: converte ID do Drive em URL de imagem.
+// Se o valor já for uma URL completa (http/https), retorna como está.
+const GDR = (id, sz='w800') => {
+  if (!id) return '';
+  if (id.startsWith('http')) return id; // URL direta — qualquer host
+  return `https://lh3.googleusercontent.com/d/${id}=${sz}`;
+};
 
 /* =========================================================
    PHOTO MANAGEMENT
@@ -487,7 +493,7 @@ const GDR = (id, sz='w800') => `https://lh3.googleusercontent.com/d/${id}=${sz}`
    ========================================================= */
 
 // Cores de capa: preferência para foto de vitrine
-const COVER_COR = { LIA:'azul marinho', MIA:'bordô', NUBIA:'bordô', ANNE:'preto', LIVIA:'preto', ZARA:'bordô', BEATRIZ:'preto' };
+const COVER_COR = { LIA:'azul marinho', MIA:'bordô', NUBIA:'bordô', ANNE:'preto', LIVIA:'preto', ZARA:'bordô', BEATRIZ:'preto', LUNA:'azul' };
 
 // PRODUCT_CORES agora é carregado dinamicamente do Google Sheets (aba FOTOS)
 // Para adicionar ou corrigir fotos: edite a planilha diretamente — sem precisar de código!
@@ -511,10 +517,10 @@ const PRODUCT_CORES_FALLBACK = {
     'verde mint':     ['1XLRCDw_g7AimTfleOaOXr1IB9NZ_EKTY','1-Yebz2xZ2n7jZeEfCpZsRZGoey5Om-0y','16w4x___4Yfr3yVaGKopzOoQqx_TW_QdF','1OH-xqEL7bNqpkDg2obMUIX7c2-IyAzqU','1GERe-eI6zvXkuRzbV1y6sNl9IV34RtB'],
   },
   MIA: {
-    'bordô':           ['1U9wQxGB35teVrOE0th7w7khzNU4tPIoe','1-L7zAmCp7ppqnaK4xSymj9FaStXzRUvx','1U_P7xC8rW-MBsBBUGEedcVXlPh2ghYNz','1XAhUwiS6DqRfqijPfrI5J1OsM6tTJqr9','1iSG0RrtRn8Wy-U3KgKYoRk5IjKVhhnMa'],
-    'azul geada':      ['1D9jwF4IktJFUmG2rLEyNquu41vTVl78L','16843lft32xiwK-1oqyjUrh1qFIUCmAt3','1DOYG9Uv9zj3SBj48hphfHGpytY6a8sje','1ES_sGtFemZEM6zmRfH1snTYQsbqbtoIp','1G9_buLA8GjYHwnJgYivwPY8EO6nFwE94'],
-    'bege com dourado':['1Ef6-WcrZKGsVteQLleCjksM-m1AcrkXW','1CMOYONYjWLrwgLTqskI2GGwvH_yIh4_6','1Eq_8qdI5qDVfvpl8rF8bNLLOY7S5cGfS','1GnygtBlhgMTjcg45UmiqqM3C7Syht0Lh','1KEJ0tdjPfmUQEoZ7T5av2BFBLrA4ized'],
-    'cinza com rosa':  ['1A-Sc35U_rVZR0V-Wb-aHydPjsAKr1rCu','190A9EQYqAW3rCPesKbq7uBJz3AEGNg5i','1JStgmDkCapfgvRZJ6CTczX2GYv-k58vQ','1JxqJI18oWaHMTJeL6yA4QgNKzbN4L2qt','1KLkHy9bVMJuY-zeVwtC4RH7BaOJyDh14'],
+    'bordô':   ['1U9wQxGB35teVrOE0th7w7khzNU4tPIoe','1-L7zAmCp7ppqnaK4xSymj9FaStXzRUvx','1U_P7xC8rW-MBsBBUGEedcVXlPh2ghYNz','1XAhUwiS6DqRfqijPfrI5J1OsM6tTJqr9','1iSG0RrtRn8Wy-U3KgKYoRk5IjKVhhnMa'],
+    'azul':    ['1iHMvi5RvLB53d_n0_JPasdUEixI6JPP1','1ibEpnsbI0aCx2YfLVHT5pdquZLT8vQGN','1PjIJdoJsR-3ynn7lJ_gTbcHM186zBZjQ','1Nzu0Urab8SfbskRWi0DVQQzXU2c8exNR'],
+    'preto':   ['1pSt7B4PxQJdQmHpP-aEBOeOhpY-Kz--h','19-MsKQ3ZeRawKZ6TG0N6g4JmuR7eFado','1qdWTee4FzeTQEOfIdVWqgNkPlVj5nvl8','1mA8yy7TyJ1Y0ga7N5EuL41JcbggmvB9s'],
+    'cinza com rosa': ['1A-Sc35U_rVZR0V-Wb-aHydPjsAKr1rCu','190A9EQYqAW3rCPesKbq7uBJz3AEGNg5i','1JStgmDkCapfgvRZJ6CTczX2GYv-k58vQ','1JxqJI18oWaHMTJeL6yA4QgNKzbN4L2qt','1KLkHy9bVMJuY-zeVwtC4RH7BaOJyDh14'],
   },
   NUBIA: {
     'bordô':          ['1hT6ClFOOMBMWmK_2CDKRMQ5ZA_I--W3n','1BhkOWgSqjtqS18tcceOCNowQ52tK8MKP','1LI5SeE4RCJI8pLFhUUh0ql21qWacUn4Y','1BSry7sGAajWWE2YZnnwGFf-gCqzBdqCY','1s-NGB6lcnLmrnhlgBPHR7hOyi7MJcpe-'],
@@ -525,7 +531,7 @@ const PRODUCT_CORES_FALLBACK = {
   },
   ANNE: {
     'bordô':       ['15kLVXqk0hwPZ8PlgShaYMw1-J0t4iLxq','14zCInKIJI_FQEhASKxJFRkAe86sSKevM','1U1a2J1z7L9Y0xZHkSOZ5f94WQU9PDKT-','1cFjk-D3sOWTatCwOT5fEuEa-JBSIG_Qy','1sFDpsAQzFzIu_AkOSCFlHdlzJ2kABXE5','1tXuQ_ZcJAqBtADNfbiuiukuT_XyK03bF'],
-    'azul':        ['1C_4xgOBcwM5idO7wQTUTlhYDWy8gwzME','19FfvGKRFmaWUYOIcALnX-sbqcDNygYmp','1KTFxpdK96M07zeNuUaE-JYJGgdxss1rY','1fA4FuM5rZts4HA84fyOADrA-17sBGoRw','1hHc0Xp3hPJTNW_xlVnbGn_4WGhuCOq6D','1tqMJwvAFmylDWAx9VP6OlclE_adY7oGl'],
+    'azul':        ['1ve4d4ABaf6_MRQIPSLywlmswIr3gwuXj','1MTsyP7iE582ZBrN7ce8sbJ7PX6p12C0a','1R0JL95sj10QjjiFR6qvBskyl7QZQfXzr','12oGR1CBHOoy8laGbveCvF_H8ib9vT4eX'],
     'cinza':       ['1KfFa2A-9wPJTNktlthW8lCzmulZacTuv','1Gs8srzvXLAO1GLqjALgz53RQpVqZ_x_I','1Ol7e5wKp4j07bsNYCrw6xFQSu2-Xg7dL','1P--zKdZHMsVMcqrECanSxiPGXzv2QTNL'],
     'azul marinho':['17Kbq_4AorrwJDAZmvuMp8udecRfYfiZQ','10a1dnItPax4e1dB6y_Pc8BtAgdnWc8b9','17yEwf-ID9I0aXF7ONDiQPjhPGNDNc5k4','1B-ddPIIf6CjrYatXo2fbsXx6-ci8jAUt','1BLzylhpI5XmT9tpAHMSkLemxvbyxn783'],
     'preto':       ['1I48V85IXIXrQUW-tCU2-7Ej-i0nXNqEu','1DS-e05y7_791qHZa6e6PTKyqoJGMyeGy','1dDDXedhygNIK-L6ISPBGt9q8wL0dRfoM','1hfhcYHqAg5oUyLjcKa_uHw4dHcsToIum','1liW2tph5CKNa6JYEp9HdYP1wu7yjy-CK'],
@@ -535,6 +541,7 @@ const PRODUCT_CORES_FALLBACK = {
     'preto':       ['12gAMGLGKe2dp4t2vO_-QvHpQ-5SsWWp4','1-ln398zyZ-ZlGuo5H1AqllN2uo_APdrf','19B4wiEuCwg1T5HqhoZZ0YvaF5jl14LPx','1MPeN8OkXG1pgIPHOgTfP8eSkrYntOQp7','1YJSBFvttahEda0dYBAPR9wNRRLYCWHdd'],
     'cinza':       ['18YGt-fkjNIR9eY382VLBB_74EJHmUXny','13BU1c86lCZ20gNVjVMN0MxHjGo__flzm','1Ehnt5qSW8M9lqatYCds5fp05t1DNylTe','1MtUzblqNVdkzlv_U4LVffEg8qEC_3Ney','1NsDh0DAzfDU9ZHUYlCBi6M7q1dBm1xuH'],
     'azul marinho':['1Cqf975hXR-_NGYrTh8myL06rJpBEAhq4','188luiOgO3Hpup27Njg6evYFm6GQllr79','1QS8J07X5bg38E8AFEIz-i4mdTIWFgLYs','1aN2tDKxln5fvTAYDRusqUxWpkk8vYiQ6','1ho4A-T2dTYxk3CE7btyestI9b8knpemy'],
+    'chocolate':   ['1wO6YqUTiEFPLz4PRPA7852PcH8fGf_2t','1d8dz67hoVLa53U1cQ1gi45wwSa7Nv3mu','10MusHzZljeA-nKH3WJ8JS5o7CHcMPdfx'],
   },
   ZARA: {
     'preto':    ['1tAxDrg_ZqwjD_K4UiFRV2ZlpApnkMS3g','1UeDhFiENVIJqF9Rqs7912FdWmyepcihE','18vm-3EeM_WzBnbMM3XygGqcdNa0mJFW0'],
@@ -542,6 +549,13 @@ const PRODUCT_CORES_FALLBACK = {
     'preto':    ['109tB0VP9_YSNBFyfOO4PJA0oeHUL4hNo','1tAxDrg_ZqwjD_K4UiFRV2ZlpApnkMS3g','13KVxP_PWvv-0gzrdZnej4gluHNf5hShX','14DAFI0kBzpyFW7BUvCmSqtu9F_vkQphq','18vm-3EeM_WzBnbMM3XygGqcdNa0mJFW0','1BG1DOsg0J2n7YBgfeKkUUkg_HylLckvQ','1FzKW29RMV5GRTjCS3MgUQq_wKbRRcXqu','1JVn3lwOuepbP2YL_PXLNk-YgoCgWX5EF','1MMcnACKH2_hLiRCI4oOnyHXFF_wk4gs0','1POUI_4ViMnXP0hSp9EauMzvrfmZP98JW','1PhFfsRS-dL5EybLxkkClPaz7mQYJDltS','1RXJ1IzVOujcT3i4E7YZO-uk3nBh5Jns8','1jPn2-cADJxjaNu-brLS4r784QHSPV9HI','1mKUm_7mjbUpTkBw8sKK-llVVtB5IOXDJ'],
     'cinza':    ['11r5QhIxFGwh7hfc5mJu_XXDqL6NagKo2','10_tFkOEOkW-Fbi9WKMkiOgM8ykxoOAGe','12ys9xdqH3f9l9rzzkK5V_d-sv8kH5jsC','14PRToysJc-LuSvEVZAObOxObDra8Y6_a','14sQ2fMuSFJT2xD9OHUKC9_8DxogaM5Bc'],
     'marinho':  ['17YRiqEgiy2jse0wlK7B55d1DI0mo7t0S','11x8iA8T3r0KPLNVdV4xwpCVQHycvslbE','1Dx-w08Dzo1PH4nrXwVxK1Ul0fFBe18BN','1alfgxtGnLbirUYMcu450KQs2FL2Fhi8g'],
+  },
+  LUNA: {
+    'bordô':     ['1-4hKzWweaQ-tOXjEDgu_RH6LhA91Zg7i','18AJGLRiILN40HmmgLFHdm15eH3ip6e2n','13gZNEOmHg5P-IxhBhDibmuIwKhD19ZBP','190Fm_KnyohXaPDesExKX0EzZgeY8bLsC','1fmzZIaMHPHQtdBofEvaAdDGSHpBNF2Eh'],
+    'cinza':     ['1TB7ETuhwbY2u-NXzBzS4X9ub4oGCkXIj','1VRk9QKuo-SPchbq0JO0Gh2ZVNIdqMGqn','1Q_h_QHxb_KsW5CCq5UYUDsMYtJzqmwBl','1fnthwZS-sq4o9llCfnQNwuF5wr_edk1h'],
+    'azul':      ['13SAiukShD3Uk8FQW7fkemaIAnRtDtvAr','13j07RXS4WAlZsqQoO8CyR6r1cXl73bTy','1JmFunqUjSyTUuKRlB8F1EYP8Tk6QnRFa','1_28w0knxDZmcUeUor5qA2WqOW-KiIHRZ'],
+    'chocolate': ['1GibwOoMLuZK-hQTTWMMBH7IwreNA-ZXA','14LTGwvqhYGuX2HfQLd_S0G1hmEt7qPQo','1z6Ep3nqrGmheEEY25CnXJg7PZHaWQknF','1lgEV7xkap7ClXtpolQKPdJfGi63ou-Cu'],
+    'preto':     ['15kFoXO9mwOSaY8vKVxbZpKRLKB4FauLU','1c9ct3OVPp6Gx4x4NrhaHp6z97uTaYKOz','1RaGgSrn8cVfQcqKUY9kB1sLqi3zZXhpn','1g33g6j6Cf4zxKX1JaAgx2kuNqG9-xkJK'],
   },
   BEATRIZ: {
     'preto':         ['18skw_rNsL7pME73gnNdfo6fhlyXsx34F','16Ag1KaO1GN4aCPahsmfejIeBGEYDme8Z','1Av8NXv-Tt7MPrcB0yMppZfjlFA4i5XdS','1IAXTP4A-2E9WJ8PEpkL3JeZYqr-yLNbd','1-_8sp5_pIMaGOg69Rvry5uHozLliYSMV'],
@@ -555,7 +569,8 @@ const PRODUCT_CORES_FALLBACK = {
 PRODUCT_CORES = PRODUCT_CORES_FALLBACK;
 
 const PRODUCTS = [
-  { id:'ZARA',   nome:'Trio Americano',           sub:'Zara',    preco:129.90, precoOld:139.90, tag:'MAIS VENDIDO',tagClass:'tag-mais-vendido', desc:'Trio americano: calça, blusa e robe. O best-seller da Pluma, em diversas cores.' },
+  { id:'LUNA',   nome:'Conjunto Pijama Americano', sub:'Luna',    preco:129.90, precoOld:149.90, tag:'NOVO',        tagClass:'tag-novo',         desc:'Conjunto pijama com calça e blusa. Tecido macio e confortável, disponível em diversas cores.' },
+  { id:'ZARA',   nome:'Trio Americano',           sub:'Zara',    preco:139.90, precoOld:159.90, tag:'MAIS VENDIDO',tagClass:'tag-mais-vendido', desc:'Trio americano: calça, blusa e robe. O best-seller da Pluma, em diversas cores.' },
   { id:'ANNE',   nome:'Pijama Longo Americano',   sub:'Anne',    preco:159.90, precoOld:179.90, tag:'NOVO',        tagClass:'tag-novo',         desc:'Pijama longo de viscose acetinada com caimento perfeito. Toque suave e leveza para noites elegantes.' },
   { id:'NUBIA',  nome:'Trio Longo Cardigan',      sub:'Núbia',   preco:169.90, precoOld:199.90, tag:'NOVO',        tagClass:'tag-novo',         desc:'Trio completo: calça, blusa e cardigan combinando. O luxo de ter tudo perfeito.' },
   { id:'LIA',    nome:'Conjunto Longo',           sub:'Lia',     preco:129.90, precoOld:149.90, tag:'NOVO',        tagClass:'tag-novo',         desc:'Calça longa e blusa manga longa em tecido macio. Ideal para noites mais frescas.' },
@@ -596,19 +611,21 @@ function validateProductPhotos() {
 // Planilha usa NÚBIA e LÍVIA (com acento), nosso id não
 const STOCK_KEY = {
   LIA:'LIA', MIA:'MIA', NUBIA:'NÚBIA', ANNE:'ANNE',
-  LIVIA:'LÍVIA', ZARA:'ZARA', BEATRIZ:'BEATRIZ'
+  LIVIA:'LÍVIA', ZARA:'ZARA', BEATRIZ:'BEATRIZ', LUNA:'LUNA'
 };
 
-// Para cada produto: cor do estoque → nome da pasta no Drive
-// Permite mostrar foto real para cada cor registrada na planilha
+// Mapeamento: cor do estoque (lowercase) → nome da pasta no Google Drive
+// Chaves em MINÚSCULAS para lookup case-insensitive
+// null = sem foto ainda → exibe swatch de cor sólida como fallback
 const STOCK_TO_DRIVE = {
-  LIA:     { 'azul marinho':'azul marinho', 'bordô':'bordô', 'preto':'preto com bege', 'cinza':null },
-  MIA:     { 'bordô':'bordô', 'azul marinho':null, 'bege':'bege com dourado', 'cinza':'cinza com rosa', 'preto':null },
-  NUBIA:   { 'azul marinho':'azul marinho', 'bordô':'bordô', 'preto':'preto com bege', 'cinza':null },
-  ANNE:    { 'azul':'azul', 'bordô':'bordô', 'cinza':'cinza', 'azul marinho':'azul marinho', 'preto':'preto', 'verde':'verde' },
-  LIVIA:   { 'preto':'preto', 'cinza':'cinza', 'azul marinho':'azul marinho', 'bordô':null },
-  ZARA:    { 'azul marinho':'marinho', 'bordô':'bordô', 'preto':'preto', 'cinza':'cinza' },
-  BEATRIZ: { 'preto':'preto', 'azul marinho':'marinho', 'bordô':null, 'cinza':'cinza com rosa' },
+  LIA:     { 'azul':'azul marinho', 'bordô':'bordô', 'preto':'preto com bege', 'cinza':null, 'chocolate':null },
+  MIA:     { 'azul':'azul',          'bordô':'bordô', 'preto':'preto',          'cinza':'cinza com rosa', 'chocolate':null },
+  NUBIA:   { 'azul':'azul marinho', 'bordô':'bordô', 'preto':'preto com bege', 'cinza':null, 'chocolate':null, 'azul jeans':null },
+  ANNE:    { 'azul':'azul',         'bordô':'bordô', 'cinza':'cinza',          'preto':'preto', 'chocolate':null },
+  LIVIA:   { 'azul':'azul marinho', 'preto':'preto', 'cinza':'cinza',          'bordô':null, 'chocolate':'chocolate' },
+  ZARA:    { 'azul':'marinho',      'bordô':'bordô', 'preto':'preto',          'cinza':'cinza', 'chocolate':null },
+  BEATRIZ: { 'preto':'preto', 'azul':'azul marinho', 'bordô':null, 'cinza':'cinza com rosa', 'ameixa':'ameixa', 'fúcsia':'fúcsia', 'chocolate':null },
+  LUNA:    { 'azul':'azul', 'bordô':'bordô', 'cinza':'cinza', 'preto':'preto', 'chocolate':'chocolate' },
 };
 
 // Resolve o stockData corretamente para um produto
@@ -796,17 +813,16 @@ function renderColorOptions(modelId) {
   const driveMap = STOCK_TO_DRIVE[modelId] || {};
   const coresData = PRODUCT_CORES[modelId] || {};
 
-  // REGRA: só exibe cores com qty > 0 na planilha (fonte de verdade)
+  // REGRA: exibe TODAS as cores — esgotadas aparecem com opacidade reduzida (out-of-stock)
   let coresParaMostrar;
   if (hasStockData) {
     const seen = new Set();
     coresParaMostrar = Object.values(modelStock)
-      .filter(v => v.disponivel > 0)
-      .map(v => v.cor)
-      .filter(cor => { if (seen.has(cor)) return false; seen.add(cor); return true; });
+      .map(v => ({ cor: v.cor, disponivel: v.disponivel }))
+      .filter(({ cor }) => { if (seen.has(cor)) return false; seen.add(cor); return true; });
   } else {
     // Sem dados ainda: mostra cores que têm foto mapeada
-    coresParaMostrar = Object.keys(driveMap).filter(c => driveMap[c]);
+    coresParaMostrar = Object.keys(driveMap).filter(c => driveMap[c]).map(cor => ({ cor, disponivel: 1 }));
   }
 
   if (!coresParaMostrar.length) {
@@ -814,22 +830,38 @@ function renderColorOptions(modelId) {
     return;
   }
 
-  const HEX = {'preto':'#1a1a1a','azul marinho':'#0d1b4b','bordô':'#7b1e2a','cinza':'#8a8a8a'};
+  const HEX = {
+    'preto':'#1a1a1a', 'azul':'#2563eb', 'azul marinho':'#0d1b4b',
+    'azul jeans':'#3a6ea8', 'bordô':'#7b1e2a', 'cinza':'#8a8a8a',
+    'chocolate':'#5c3317', 'bege':'#d4b896', 'verde':'#2d6a4f', 'ameixa':'#6b21a8',
+    'fúcsia':'#db2777', 'azul geada':'#93c5fd'
+  };
 
-  container.innerHTML = coresParaMostrar.map(corEstoque => {
-    const nomeNoDrive = driveMap[corEstoque];
+  container.innerHTML = coresParaMostrar.map(({ cor: corEstoque, disponivel }) => {
+    // Lookup case-insensitive: estoque pode vir capitalizado ('Azul'), mapa é minúsculo ('azul')
+    const corKey = corEstoque.toLowerCase();
+    const nomeNoDrive = driveMap[corKey] !== undefined ? driveMap[corKey] : driveMap[corEstoque];
     const ids = nomeNoDrive ? coresData[nomeNoDrive] : null;
     const temFoto = !!(ids && ids.length);
     const label = capitalize(corEstoque);
+    const esgotado = disponivel === 0;
+    const esgotadoClass = esgotado ? ' out-of-stock' : '';
+    const clickAttr = esgotado ? '' : ` onclick="selectColor('${corEstoque}')"`;
+    const titleAttr = esgotado ? `${label} — Esgotado` : label;
 
     if (temFoto) {
-      return `<div class="color-thumb" data-cor="${corEstoque}" data-drive="${nomeNoDrive}" onclick="selectColor('${corEstoque}')" title="${label}">
+      // Tem foto no Drive: exibe thumbnail real do produto
+      return `<div class="color-thumb${esgotadoClass}" data-cor="${corEstoque}" data-drive="${nomeNoDrive}"${clickAttr} title="${titleAttr}">
         <img class="color-thumb-img" src="${GDR(ids[0],'w200')}" alt="${label}" loading="lazy">
         <span class="color-thumb-label">${label}</span>
       </div>`;
     } else {
-      // Sem foto: não exibe o swatch para o cliente
-      return '';
+      // Sem foto mapeada: swatch de cor sólida como fallback
+      const hexColor = HEX[corKey] || '#cccccc';
+      return `<div class="color-thumb${esgotadoClass}" data-cor="${corEstoque}"${clickAttr} title="${titleAttr}">
+        <div class="color-thumb-img" style="background-color:${hexColor};width:52px;height:64px;border-radius:8px;display:block;border:1.5px solid rgba(0,0,0,.08);"></div>
+        <span class="color-thumb-label">${label}</span>
+      </div>`;
     }
   }).join('');
 }
@@ -1357,6 +1389,6 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') { closeProductModal(); closeCheckout(); }
 });
 </script>
-<script src="/js/auth-modal.js?v=20260521f"></script>
+<script src="/js/auth-modal.js?v=20260527otp"></script>
 </body>
 </html>

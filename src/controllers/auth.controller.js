@@ -3,6 +3,40 @@ import { v4 as uuidv4 } from 'uuid';
 import { queryOne, query, run } from '../config/database.js';
 import { validarCPF, normalizarCelular } from '../middleware/authMiddleware.js';
 import { logger } from '../utils/logger.js';
+import { enviarMensagem } from '../services/whatsapp/sender.js';
+
+// ─── Helpers OTP ──────────────────────────────────────────────────────────────
+const JWT_SECRET = () => process.env.JWT_SECRET || 'pluma-jwt-secret-2025';
+const OTP_VALIDADE_MS = 5 * 60 * 1000; // 5 minutos
+
+function gerarOTP() {
+  return String(Math.floor(1000 + Math.random() * 9000));
+}
+
+function normalizarCPF(cpf) {
+  return (cpf || '').replace(/\D/g, '');
+}
+
+function mascaraWhatsApp(numero) {
+  // Mostra só os últimos 4 dígitos: ex. *****1234
+  const digitos = (numero || '').replace(/\D/g, '');
+  return digitos.length >= 4 ? `*****${digitos.slice(-4)}` : '****';
+}
+
+function gerarTokenJWT(cliente) {
+  return jwt.sign(
+    {
+      id_cliente: cliente.id_cliente,
+      nome: cliente.nome,
+      whatsapp: cliente.whatsapp,
+      cpf: cliente.cpf,
+      email: cliente.email || null
+    },
+    JWT_SECRET(),
+    { expiresIn: '7d' }
+  );
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
 /**
  * LOGIN COM CELULAR + CPF (novo sistema)
@@ -432,5 +466,209 @@ export function googleCallback(req, res) {
   } catch (error) {
     logger.error(`[GOOGLE] Erro: ${error.message}`);
     res.redirect('/?auth=error');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  SISTEMA OTP — Login Frictionless via CPF + WhatsApp
+// ═══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * POST /api/auth/iniciar
+ * Recebe CPF e decide o fluxo:
+ *   - Cliente novo  → { novo_cliente: true }
+ *   - Cliente existe → gera OTP, envia WhatsApp, retorna { novo_cliente: false, whatsapp_mascarado }
+ */
+export async function iniciarOTP(req, res) {
+  try {
+    const { cpf } = req.body;
+    if (!cpf) return res.status(400).json({ ok: false, erro: 'CPF obrigatório' });
+
+    const cpfNorm = normalizarCPF(cpf);
+    if (cpfNorm.length !== 11) {
+      return res.status(400).json({ ok: false, erro: 'CPF inválido' });
+    }
+
+    const cliente = queryOne(
+      `SELECT * FROM clientes WHERE REPLACE(REPLACE(cpf, '.', ''), '-', '') = ?`,
+      [cpfNorm]
+    );
+
+    // Cliente não cadastrado — pedir nome e WhatsApp
+    if (!cliente) {
+      return res.json({ ok: true, novo_cliente: true });
+    }
+
+    // Cliente existe — gerar e enviar OTP
+    const codigo = gerarOTP();
+    const expira = new Date(Date.now() + OTP_VALIDADE_MS).toISOString();
+
+    run(
+      `UPDATE clientes SET otp_atual = ?, otp_expira_em = ?, updated_at = ? WHERE id_cliente = ?`,
+      [codigo, expira, new Date().toISOString(), cliente.id_cliente]
+    );
+
+    // Enviar código via WhatsApp
+    const mensagem = `🔐 *Pluma Pijamas*\n\nSeu código de acesso é: *${codigo}*\n\nVálido por 5 minutos. Não compartilhe com ninguém.`;
+    await enviarMensagem(cliente.whatsapp, mensagem);
+
+    logger.info(`[OTP] Código enviado para cliente ${cliente.nome} (${mascaraWhatsApp(cliente.whatsapp)})`);
+
+    return res.json({
+      ok: true,
+      novo_cliente: false,
+      whatsapp_mascarado: mascaraWhatsApp(cliente.whatsapp)
+    });
+  } catch (error) {
+    logger.error(`[OTP iniciar] ${error.message}`);
+    return res.status(500).json({ ok: false, erro: 'Erro interno' });
+  }
+}
+
+/**
+ * POST /api/auth/validar
+ * Recebe { cpf, codigo } — valida OTP e retorna token JWT se correto
+ */
+export async function validarOTP(req, res) {
+  try {
+    const { cpf, codigo } = req.body;
+    if (!cpf || !codigo) {
+      return res.status(400).json({ ok: false, erro: 'CPF e código são obrigatórios' });
+    }
+
+    const cpfNorm = normalizarCPF(cpf);
+
+    const cliente = queryOne(
+      `SELECT * FROM clientes WHERE REPLACE(REPLACE(cpf, '.', ''), '-', '') = ?`,
+      [cpfNorm]
+    );
+
+    if (!cliente) {
+      return res.status(404).json({ ok: false, erro: 'Cliente não encontrado' });
+    }
+
+    // Verificar se há OTP gerado
+    if (!cliente.otp_atual) {
+      return res.status(400).json({ ok: false, erro: 'Nenhum código foi solicitado. Chame /iniciar primeiro.' });
+    }
+
+    // Verificar expiração
+    if (new Date() > new Date(cliente.otp_expira_em)) {
+      run(`UPDATE clientes SET otp_atual = NULL, otp_expira_em = NULL WHERE id_cliente = ?`, [cliente.id_cliente]);
+      return res.status(401).json({ ok: false, erro: 'Código expirado. Solicite um novo.' });
+    }
+
+    // Verificar código
+    if (codigo.trim() !== cliente.otp_atual) {
+      return res.status(401).json({ ok: false, erro: 'Código incorreto' });
+    }
+
+    // OTP válido — limpar e gerar JWT
+    run(
+      `UPDATE clientes SET otp_atual = NULL, otp_expira_em = NULL, updated_at = ? WHERE id_cliente = ?`,
+      [new Date().toISOString(), cliente.id_cliente]
+    );
+
+    const token = gerarTokenJWT(cliente);
+
+    logger.info(`[OTP] ✓ Login confirmado: ${cliente.nome}`);
+
+    return res.json({
+      ok: true,
+      token,
+      cliente: {
+        id_cliente: cliente.id_cliente,
+        nome: cliente.nome,
+        whatsapp: cliente.whatsapp,
+        cpf: cliente.cpf,
+        email: cliente.email || null
+      }
+    });
+  } catch (error) {
+    logger.error(`[OTP validar] ${error.message}`);
+    return res.status(500).json({ ok: false, erro: 'Erro interno' });
+  }
+}
+
+/**
+ * POST /api/auth/cadastrar
+ * Fluxo de cliente novo: recebe { cpf, nome, whatsapp }, cria no banco e retorna JWT
+ */
+export async function cadastrarClienteOTP(req, res) {
+  try {
+    const { cpf, nome, whatsapp } = req.body;
+
+    if (!cpf || !nome || !whatsapp) {
+      return res.status(400).json({ ok: false, erro: 'CPF, nome e whatsapp são obrigatórios' });
+    }
+
+    const cpfNorm = normalizarCPF(cpf);
+    if (cpfNorm.length !== 11) {
+      return res.status(400).json({ ok: false, erro: 'CPF inválido' });
+    }
+
+    const whatsappNorm = normalizarCelular(whatsapp);
+
+    // Verificar duplicatas
+    const cpfExiste = queryOne(
+      `SELECT id_cliente FROM clientes WHERE REPLACE(REPLACE(cpf, '.', ''), '-', '') = ?`,
+      [cpfNorm]
+    );
+    if (cpfExiste) {
+      return res.status(409).json({ ok: false, erro: 'CPF já cadastrado. Use o login.' });
+    }
+
+    const wppExiste = queryOne(
+      `SELECT * FROM clientes WHERE whatsapp = ?`,
+      [whatsappNorm]
+    );
+    if (wppExiste) {
+      // WhatsApp já tem conta → enviar OTP automaticamente e redirecionar para tela de código
+      const codigo = gerarOTP();
+      const expira = new Date(Date.now() + OTP_VALIDADE_MS).toISOString();
+      run(
+        `UPDATE clientes SET otp_atual = ?, otp_expira_em = ?, updated_at = ? WHERE id_cliente = ?`,
+        [codigo, expira, new Date().toISOString(), wppExiste.id_cliente]
+      );
+      const mensagem = `🔐 *Pluma Pijamas*\n\nSeu código de acesso é: *${codigo}*\n\nVálido por 5 minutos.`;
+      await enviarMensagem(wppExiste.whatsapp, mensagem);
+      logger.info(`[OTP cadastrar] WhatsApp existente → OTP enviado para ${mascaraWhatsApp(whatsappNorm)}`);
+      return res.status(200).json({
+        ok: false,
+        tipo: 'whatsapp_existente',
+        mensagem: 'Esse WhatsApp já tem uma conta. Enviamos um código de acesso para confirmar.',
+        whatsapp_mascarado: mascaraWhatsApp(whatsappNorm)
+      });
+    }
+
+    // Criar cliente
+    const idCliente = uuidv4();
+    const agora = new Date().toISOString();
+
+    run(
+      `INSERT INTO clientes (id_cliente, nome, whatsapp, cpf, data_primeiro_pedido, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [idCliente, nome.trim(), whatsappNorm, cpfNorm, agora, agora, agora]
+    );
+
+    const novoCliente = queryOne('SELECT * FROM clientes WHERE id_cliente = ?', [idCliente]);
+    const token = gerarTokenJWT(novoCliente);
+
+    logger.info(`[OTP cadastrar] ✓ Novo cliente: ${nome} (${mascaraWhatsApp(whatsappNorm)})`);
+
+    return res.status(201).json({
+      ok: true,
+      token,
+      cliente: {
+        id_cliente: idCliente,
+        nome: novoCliente.nome,
+        whatsapp: novoCliente.whatsapp,
+        cpf: novoCliente.cpf,
+        email: novoCliente.email || null
+      }
+    });
+  } catch (error) {
+    logger.error(`[OTP cadastrar] ${error.message}`);
+    return res.status(500).json({ ok: false, erro: 'Erro interno' });
   }
 }

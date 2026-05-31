@@ -4,7 +4,6 @@ import { inicializarScheduler, cancelarTodosJobs } from './src/services/schedule
 import { executarMonitor } from './src/services/monitor/evolution-monitor.js';
 import { initializeDatabase, closeDatabase, saveDatabase } from './src/config/database.js';
 import { initializeClaude } from './src/config/claude.js';
-import { initializeGemini } from './src/config/gemini.js';
 import { inicializarSecretSessao } from './src/utils/sessionTokens.js';
 import { env } from './src/config/env.js';
 
@@ -16,7 +15,6 @@ async function iniciar() {
 
   // Inicializar Claude API
   initializeClaude();
-  await initializeGemini();
 
   // Inicializar secret de sessão do cliente (Portal)
   const clienteSessionSecret = process.env.CLIENTE_SESSION_SECRET;

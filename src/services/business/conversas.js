@@ -4,10 +4,11 @@ import * as pedidosService from './pedidos.js';
 import { analisarVendas } from './analytics.js';
 import { gerarRecomendacaoCliente, gerarRecomendacaoEstoque } from './recomendacoes.js';
 import { temPermissao, obterInfoUsuario, ROLES } from '../../config/users.js';
-import { callAI } from '../../config/gemini.js';
+import { callAI } from '../../config/claude.js';
 import * as sheetsEstoque from '../sqlite/estoque.js';
 import * as sheetsPedidos from '../sqlite/pedidos.js';
 import { enviarMensagem } from '../whatsapp/sender.js';
+import { env } from '../../config/env.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -86,6 +87,50 @@ function gerarListaPlanaEstoque(estoqueList) {
   return linhas.join('\n');
 }
 
+/**
+ * Formata o estoque do banco em texto limpo para WhatsApp.
+ * Agrupa por Modelo → Cor → tamanhos com quantidades.
+ * Fonte única de verdade: SQLite. Sem IA, sem alucinação.
+ */
+function formatarEstoqueWhatsApp(estoqueList) {
+  if (!estoqueList || estoqueList.length === 0) {
+    return '📦 Nenhum item em estoque no momento.';
+  }
+
+  // Ordenar: P < M < G < GG
+  const ordemTam = { P: 0, M: 1, G: 2, GG: 3 };
+
+  // Agrupar: modelo → cor → { tamanho: qtd }
+  const mapa = {};
+  let totalGeral = 0;
+  for (const item of estoqueList) {
+    const qtd = item.quantidade_disponivel || 0;
+    if (qtd <= 0) continue;
+    const modelo = item.modelo || '?';
+    const cor    = item.cor    || '?';
+    const tam    = item.tamanho || '?';
+    if (!mapa[modelo]) mapa[modelo] = {};
+    if (!mapa[modelo][cor]) mapa[modelo][cor] = {};
+    mapa[modelo][cor][tam] = (mapa[modelo][cor][tam] || 0) + qtd;
+    totalGeral += qtd;
+  }
+
+  const linhas = [`📦 *ESTOQUE PLUMA — ${totalGeral} peças*\n`];
+
+  for (const modelo of Object.keys(mapa).sort()) {
+    linhas.push(`*${modelo}*`);
+    for (const cor of Object.keys(mapa[modelo]).sort()) {
+      const tamStr = Object.entries(mapa[modelo][cor])
+        .sort(([a], [b]) => (ordemTam[a] ?? 9) - (ordemTam[b] ?? 9))
+        .map(([t, q]) => `${t}:${q}`)
+        .join(' ');
+      linhas.push(`  ${cor} — ${tamStr}`);
+    }
+  }
+
+  return linhas.join('\n');
+}
+
 // ---------------------------------------------------------------------------
 // Função principal: Claude como cérebro para mensagens livres
 // ---------------------------------------------------------------------------
@@ -158,8 +203,13 @@ async function processarComClaude(mensagem, clienteWhatsApp, contexto) {
 Usuário: ${nomeUsuario} (${roleUsuario}).
 Data/Hora: ${agora} (Horário de Boa Vista)
 
-ESTOQUE ATUAL:
-${listaPlanaEstoque}
+╔══════════════════════════════════════════╗
+║  ESTOQUE REAL — FONTE ÚNICA DE VERDADE  ║
+║  USE APENAS ESTES DADOS. PROIBIDO       ║
+║  inventar modelos, cores ou tamanhos    ║
+║  que não estejam listados abaixo.       ║
+╚══════════════════════════════════════════╝
+${listaPlanaEstoque || '(estoque vazio)'}
 
 CONTEXTO: ${contextoTexto}
 
@@ -172,12 +222,22 @@ FORMATO OBRIGATÓRIO:
 
 AÇÕES E QUANDO USAR:
 
-1. "criar_pedido" — quando mencionar produto + cliente
-   Exemplos: "1 zara M preto pra Maria", "adicionar pra entrega 2 mia P azul pra João", "anota aí 1 lia bordô G pra Ana", "faz um pedido de 1 nubia M preto pra lucia", "adicionar pedido: zara preto m para veronica", "adicionar: lia bordô G para joão"
-   → dados.itens = [{"modelo":"ZARA","tamanho":"M","cor":"preto","quantidade":1}]
-   → dados.nome_cliente = "Maria"
+1. "criar_pedido" — quando mencionar produto + cliente OU quando a intenção for INICIAR/ADICIONAR um pedido
+   Exemplos diretos: "1 zara M preto pra Maria", "adicionar pra entrega 2 mia P azul pra João", "anota aí 1 lia bordô G pra Ana"
+   Exemplos de INTENÇÃO (mesmo sem produto/cliente ainda):
+     "vamos adicionar alguns pedidos", "quero fazer um pedido", "novo pedido", "criar um pedido",
+     "adicionar pedido", "anotar um pedido", "fazer um pedido agora",
+     "outro pedido", "mais um pedido", "adicionar mais um", "e mais um"
+   → Se tiver produto+cliente: preencha dados.itens e dados.nome_cliente normalmente
+   → Se só tiver intenção sem detalhes: resposta = "Claro! Qual o cliente e o que deseja pedir?" e dados vazios
+   Quantidade padrão é 1 se não mencionada.
 
-   IMPORTANTE: Reconheça também formatações alternativas com "adicionar pedido:" ou "adicionar:" seguido por modelo-cor-tamanho-cliente. Quantidade padrão é 1 se não mencionada.
+   ⚠️ REGRA CRÍTICA SOBRE CORES: Use EXATAMENTE a cor que o usuário digitou. NUNCA adicione complementos.
+   Exemplos CORRETOS:
+     usuário diz "azul"      → cor: "azul"         (NÃO "azul marinho", NÃO "azul jeans")
+     usuário diz "preto"     → cor: "preto"        (NÃO "preto com bege")
+     usuário diz "chocolate" → cor: "chocolate"    (NÃO "marrom")
+   Se o usuário não especificar a cor, deixe cor: null e pergunte qual cor.
 
 2. "confirmar_pagamento" — quando falar que pagou
    Exemplos: "pedido 3 pago no pix", "confirmei o pix do 5", "pagou cartão pedido 2", "recebi o pagamento do 4"
@@ -191,8 +251,9 @@ AÇÕES E QUANDO USAR:
    Exemplos: "saindo entregar pra Maria", "vou levar o pedido 3", "indo entregar agora"
    → dados.numero_pedido ou dados.nome_cliente
 
-5. "listar_pedidos_abertos" — quando perguntar sobre pedidos em aberto
-   Exemplos: "pedidos", "manda os pedidos", "quais pedidos", "o que tá pendente"
+5. "listar_pedidos_abertos" — quando CONSULTAR/VER pedidos existentes
+   Exemplos: "pedidos", "manda os pedidos", "quais pedidos", "o que tá pendente", "mostra os pedidos"
+   ATENÇÃO: "adicionar pedido", "novo pedido", "criar pedido", "vamos adicionar" → NÃO é listar → é criar_pedido
 
 6. "buscar_cliente" — quando perguntar sobre pedidos de alguém
    Exemplos: "pedidos da Maria", "o que João comprou"
@@ -204,7 +265,14 @@ AÇÕES E QUANDO USAR:
 
 8. "responder" — para todo o resto (saudações, perguntas de estoque, dúvidas)
    → resposta natural em português, amigável, máximo 5 linhas
-   → Para estoque: use os dados reais acima, uma linha por modelo
+   → Para estoque: USE EXCLUSIVAMENTE os dados listados em ESTOQUE REAL acima.
+     NUNCA invente cores, modelos ou quantidades que não estejam nessa lista.
+
+9. "listar_entregas_pendentes" — quando perguntar o que falta entregar ou enviar
+   Exemplos: "temos algum pedido pra ser entregue?", "o que falta entregar?",
+             "quais pedidos precisam de entrega?", "tem pedido aguardando entrega?",
+             "o que está pendente de entrega?", "pedidos pra entregar hoje"
+   → Não precisa de dados extras, o sistema consulta o banco automaticamente
 
 EXEMPLOS COMPLETOS:
 Entrada: "1 zara M preto pra Maria"
@@ -260,20 +328,9 @@ Saída: {"action":"responder","resposta":"ZARA M disponível:\n- preto: 9 un\n- 
       resultado = { action: 'responder', resposta: textoLimpo || 'Como posso ajudar?' };
     }
 
-    // FALLBACK: Detecção por palavra-chave para "listar_pedidos_abertos"
-    // (em caso de Groq não reconhecer a intenção corretamente)
-    const msgLower = mensagem.toLowerCase().trim();
-    const ehPedidosAbertos = (
-      (msgLower.includes('pedido') || msgLower.includes('@pedidos')) &&
-      !msgLower.match(/pedido\s*#\d+|pedido\s+\d+/) && // não é referência a número específico
-      !msgLower.match(/pedido\s+(?:do|da|de|do senhor|da senhora)/) // não é pedidos de um cliente
-    );
-
-    if (ehPedidosAbertos && resultado.action === 'responder' && !msgLower.includes('pra ') && !msgLower.includes('para ')) {
-      logger.info(`[fallback] Detectado "listar_pedidos_abertos" por palavra-chave: "${mensagem.substring(0, 50)}"`);
-      resultado.action = 'listar_pedidos_abertos';
-      resultado.resposta = ''; // Vai ser preenchido pelo case statement
-    }
+    // FALLBACK REMOVIDO — não sobrescrever mais a decisão do Claude por palavra-chave.
+    // "vamos adicionar alguns pedidos" contém "pedido" mas a intenção é criar, não listar.
+    // O Claude já está instruído a distinguir listar vs criar. Confiamos nele.
 
     // Salvar esta troca no histórico (assíncrono, não bloqueia)
     if (resultado.resposta) {
@@ -308,18 +365,19 @@ function responderSemClaude(mensagem, clienteWhatsApp, resumoEstoque) {
     return { action: 'responder', resposta: gerarSaudacao(clienteWhatsApp) };
   }
 
-  // Perguntas EXPLÍCITAS sobre estoque (precisa ter palavra de pergunta)
-  const modelos = ['zara', 'mia', 'lia', 'núbia', 'nubia', 'lívia', 'livia', 'beatriz', 'anne'];
+  // Perguntas EXPLÍCITAS sobre estoque — modelos lidos do banco, não hardcoded
   const perguntaEstoque = /quantos?|tem\b|temos|disponív|sobrou|resta|quanto/.test(msg);
   if (perguntaEstoque) {
-    for (const m of modelos) {
-      if (msg.includes(m)) {
-        const modeloUpper = m.toUpperCase();
-        const linhas = resumoEstoque.split('\n').filter(l => l.toUpperCase().startsWith(modeloUpper));
+    const modelosBanco = sheetsEstoque.listarModelosDisponiveis();
+    for (const m of modelosBanco) {
+      const mNorm = m.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+      const msgNorm = msg.normalize('NFD').replace(/[̀-ͯ]/g, '');
+      if (msgNorm.includes(mNorm)) {
+        const linhas = resumoEstoque.split('\n').filter(l => l.toUpperCase().startsWith(m.toUpperCase()));
         if (linhas.length > 0) {
-          return { action: 'responder', resposta: `${nome ? nome + ', t' : 'T'}emos ${modeloUpper}:\n${linhas[0]}` };
+          return { action: 'responder', resposta: `${nome ? nome + ', t' : 'T'}emos ${m}:\n${linhas[0]}` };
         }
-        return { action: 'responder', resposta: `Sem estoque de ${modeloUpper} no momento.` };
+        return { action: 'responder', resposta: `Sem estoque de ${m} no momento.` };
       }
     }
     return {
@@ -342,7 +400,25 @@ function responderSemClaude(mensagem, clienteWhatsApp, resumoEstoque) {
 const FAST_PATH_RULES = [
   // Saudações simples
   { regex: /^(oi|olá|ola|hey|bom dia|boa tarde|boa noite|eai|e aí|menu|ajuda|socorro|opa|oii|oeee?)$/i, action: 'saudacao' },
-  // Listar pedidos abertos
+
+  // ⭐ INTENÇÃO DE CRIAR PEDIDO — capturar ANTES de listar
+  // Frases com verbos de ação + "pedido(s)" → sempre criar, nunca listar
+  {
+    regex: /(?:vamos?\s+|quero\s+|vai\s+|vou\s+|me\s+|pode\s+)?(?:adicionar|criar|fazer|anotar|registrar|incluir|lançar|abrir)\s+(?:um\s+|alguns\s+|os\s+|novos?\s+)?pedidos?/i,
+    action: 'iniciar_pedido'
+  },
+  // "novo pedido", "outro pedido", "mais um", "adicionar mais um"
+  {
+    regex: /^(?:novo|outro|quero(?:\s+fazer)?|fazer|abrir|criar|anotar|mais\s+um|adicionar\s+mais\s+um|e\s+mais\s+um)\s*(?:um\s+)?pedidos?$/i,
+    action: 'iniciar_pedido'
+  },
+  // "outro pedido" / "mais um pedido" como frase completa
+  {
+    regex: /^(?:outro|mais\s+um|e\s+mais\s+um)(?:\s+pedido)?$/i,
+    action: 'iniciar_pedido'
+  },
+
+  // Listar pedidos abertos — só palavras isoladas, sem verbos de ação antes
   { regex: /^(@?pedidos?|@?pendentes?|abertos?)$/i, action: 'listar_pedidos_abertos' },
   // Analytics
   { regex: /^@estoque$/i, action: '@estoque' },
@@ -358,9 +434,10 @@ const FAST_PATH_RULES = [
     regex: /(?:fa[çc]a?\s+(?:um\s+)?resumo|manda?\s+(?:o\s+)?estoque|ver\s+estoque|lista\s+(?:o\s+)?estoque|me\s+(?:manda|passa|d[aá])\s+(?:o\s+)?estoque|estoque\s+(?:atual|completo|todo))/i,
     action: 'resumo_estoque_completo'
   },
-  // ⭐ CONSULTAR ESTOQUE — "tem X", "temos Y", "existe Z" (NOVO: consulta banco real)
+  // CONSULTAR ESTOQUE — apenas quando explicitamente mencionar pijama/peça/roupa
+  // Perguntas genéricas com "temos" vão para o Claude para interpretar corretamente
   {
-    regex: /(?:t[eê]m|temos|existe|há)\s+(?:algum|alguma|[oa]s?)?\s*(?:pijama|peça|roupa)?\s*(.+)/i,
+    regex: /(?:t[eê]m|temos|existe|há)\s+(?:algum|alguma|[oa]s?)?\s+(?:pijama|peça|roupa)s?\s+(.+)/i,
     action: 'consultar_estoque',
     extract: m => ({ criterio: m[1] })
   },
@@ -431,6 +508,82 @@ async function processarComClaudeComRetry(mensagem, clienteWhatsApp, contexto, m
 }
 
 /**
+ * Detecta uma linha de pedido: precisa ter "pra"/"para" seguido de um nome.
+ * Ex: "1 Mia M azul-marinho pra Lidiane"  →  match (nome = "Lidiane")
+ *     "2 zara g preto para a Karu"          →  match (nome = "Karu")
+ * Captura o nome SEMPRE no fim da linha após "pra/para".
+ */
+const REGEX_LINHA_PEDIDO = /^\s*\d*\s*\S.*\b(?:pra|para)\s+(.+?)\s*$/i;
+
+/**
+ * Tenta processar a mensagem como um LOTE de pedidos (uma linha = um pedido).
+ *
+ * Regra: se a mensagem tiver 2+ linhas e ao menos 2 delas casarem o padrão
+ * "<produto...> pra <Nome>", cada linha vira um pedido INDEPENDENTE, com seu
+ * próprio número e cliente. Caso contrário, retorna null (fluxo normal segue).
+ *
+ * @returns {Promise<object|null>} resultado agregado ou null se não for lote.
+ */
+async function tentarProcessarLote(mensagem, clienteWhatsApp) {
+  if (!mensagem || !mensagem.includes('\n')) return null; // lote exige múltiplas linhas
+
+  const linhas = mensagem
+    .split(/\r?\n/)
+    .map(l => l.trim())
+    .filter(Boolean);
+
+  // Linhas que parecem pedido (têm "pra/para <nome>")
+  const linhasPedido = linhas.filter(l => REGEX_LINHA_PEDIDO.test(l));
+
+  // Só ativa o modo lote com 2+ pedidos — 1 linha segue o fluxo normal
+  if (linhasPedido.length < 2) return null;
+
+  logger.info(`[lote] Detectado lote: ${linhasPedido.length} pedido(s) em ${linhas.length} linha(s)`);
+
+  const sucessos = [];
+  const falhas = [];
+
+  // Processa CADA linha como um pedido independente (sequencial, evita corrida no estoque)
+  for (const linha of linhasPedido) {
+    try {
+      // Cada linha passa pelo interpretador de pedido isoladamente → número próprio
+      const res = await pedidosService.processarMensagemPedido(linha, clienteWhatsApp);
+      if (res?.success !== false && res?.numero_pedido) {
+        sucessos.push({ numero: res.numero_pedido, linha, msg: res.mensagem_usuario });
+      } else {
+        falhas.push({ linha, motivo: res?.mensagem_usuario || res?.erro || 'não reconhecido' });
+      }
+    } catch (err) {
+      logger.error(`[lote] Erro na linha "${linha}": ${err.message}`);
+      falhas.push({ linha, motivo: 'erro ao processar' });
+    }
+  }
+
+  // Limpa qualquer pedido parcial pendente — lote é sempre processado por completo
+  await sheetConversas.salvarContexto(clienteWhatsApp, { historico: [] }).catch(() => {});
+
+  // Monta resposta consolidada
+  const partes = [`📦 *${sucessos.length} pedido(s) criado(s) em lote:*\n`];
+  for (const s of sucessos) {
+    partes.push(`✅ *#${String(s.numero).padStart(3, '0')}* — ${s.linha}`);
+  }
+  if (falhas.length > 0) {
+    partes.push(`\n⚠️ *${falhas.length} linha(s) não processada(s):*`);
+    for (const f of falhas) {
+      partes.push(`❌ "${f.linha}" — ${f.motivo}`);
+    }
+  }
+
+  return {
+    success: sucessos.length > 0,
+    resposta: partes.join('\n'),
+    tipo: 'LOTE_PEDIDOS',
+    totalLinhas: linhasPedido.length,
+    criados: sucessos.map(s => s.numero)
+  };
+}
+
+/**
  * Processa mensagem com suporte a contexto multi-turno.
  * Comandos @ específicos vão para analytics; tudo mais passa pelo Claude.
  */
@@ -439,6 +592,15 @@ async function processarMensagemComContexto(mensagem, clienteWhatsApp) {
   let usouFastPath = false;
 
   try {
+    // 📦 PEDIDOS EM LOTE: várias linhas, cada uma com "pra/para NOME" → pedidos separados.
+    // Detecta ANTES de tudo: se há 2+ linhas no formato de pedido, processa cada linha
+    // como um pedido INDEPENDENTE (número próprio, cliente próprio).
+    const loteResultado = await tentarProcessarLote(mensagem, clienteWhatsApp);
+    if (loteResultado) {
+      logger.info(`[lote] ${loteResultado.totalLinhas} linha(s) processada(s) em ${Date.now() - inicio}ms`);
+      return loteResultado;
+    }
+
     // 1. Carregar contexto existente
     const contextoCarregado = await sheetConversas.carregarContexto(clienteWhatsApp);
     const contexto = contextoCarregado?.contexto || {};
@@ -467,6 +629,18 @@ async function processarMensagemComContexto(mensagem, clienteWhatsApp) {
         const resposta = gerarSaudacao(clienteWhatsApp);
         logger.info(`[FastPath] Saudação em ${Date.now() - inicio}ms`);
         return { success: true, resposta, tipo: 'SAUDACAO' };
+      }
+
+      // ⭐ Intenção de criar pedido sem produto/cliente ainda
+      if (fp.action === 'iniciar_pedido') {
+        // Resetar histórico da sessão — evita que o Claude leia erros antigos e repita padrões
+        sheetConversas.salvarContexto(clienteWhatsApp, { historico: [] }).catch(() => {});
+        logger.info(`[FastPath] Iniciar pedido — histórico resetado em ${Date.now() - inicio}ms`);
+        return {
+          success: true,
+          resposta: '📝 Claro! Me passa o cliente e os itens.\nEx: "1 Zara M preto pra Maria" ou "2 Anne P azul pra João"',
+          tipo: 'INICIAR_PEDIDO'
+        };
       }
 
       // ⭐ Alertas de estoque (consulta banco real — mostra o que está acabando)
@@ -539,13 +713,20 @@ async function processarMensagemComContexto(mensagem, clienteWhatsApp) {
         return { success: true, resposta, tipo: 'LISTAR_PEDIDOS' };
       }
 
-      // Tratar analytics via fast-path
+      // @estoque — lê DIRETAMENTE do banco, zero IA, zero alucinação
       if (fp.action === '@estoque') {
         if (!temPermissao(clienteWhatsApp, 'ANALYTICS_ESTOQUE')) {
           return { success: false, resposta: '❌ Sem permissão para ver estoque.', tipo: 'ANALYTICS_ESTOQUE' };
         }
-        const resposta = await processarAnalyticsEstoque();
-        return { success: true, resposta, tipo: 'ANALYTICS_ESTOQUE' };
+        try {
+          const lista = await sheetsEstoque.readAllEstoque();
+          const resposta = formatarEstoqueWhatsApp(lista);
+          logger.info(`[FastPath] @estoque direto do banco em ${Date.now() - inicio}ms`);
+          return { success: true, resposta, tipo: 'ANALYTICS_ESTOQUE' };
+        } catch (err) {
+          logger.error('[FastPath] Erro @estoque:', err.message);
+          return { success: false, resposta: 'Erro ao consultar estoque. Tenta de novo?', tipo: 'ANALYTICS_ESTOQUE' };
+        }
       }
 
       if (fp.action === '@analise') {
@@ -605,19 +786,7 @@ async function processarMensagemComContexto(mensagem, clienteWhatsApp) {
     // 2. Detectar comandos @ específicos (alta prioridade)
     const tipoComando = detectarComandoAnalitics(mensagem);
 
-    // ⭐ DETECÇÃO EXPLÍCITA: Se mensagem contém "pedido" sem número específico = listar_pedidos_abertos
-    const msgLower = mensagem.toLowerCase().trim();
-    const temPalavraChavePedidos = msgLower.includes('pedido') || msgLower.includes('@pedido');
-    const naoEhPedidoEspecifico = !msgLower.match(/\bpedido\s*#?\d+/) && // não tem "pedido 123" ou "pedido #123"
-                                  !msgLower.match(/\bpedido\s*d[oa]\s*\w+/) &&  // não tem "pedido da Maria"
-                                  !msgLower.match(/(?:^|\s)pra\s+/i); // não é criação de pedido "2 zara pra João"
-
-    if (temPalavraChavePedidos && naoEhPedidoEspecifico && !tipoComando) {
-      logger.info(`[DETECÇÃO RÁPIDA] Pedidos em aberto detectados: "${mensagem.substring(0, 50)}"`);
-      const pedidosAbertos = await sheetsPedidos.listarTodosPendentes();
-      const resposta = formatarPedidosAbertos(pedidosAbertos);
-      return { success: true, resposta, tipo: 'LISTAR_PEDIDOS' };
-    }
+    // Detecção por palavra-chave removida — Claude interpreta a intenção corretamente.
 
     // Completar pedido parcial (quando bot está esperando informação faltante)
     if (contexto.pedido_parcial && !tipoComando) {
@@ -771,6 +940,29 @@ async function processarMensagemComContexto(mensagem, clienteWhatsApp) {
           // Se Groq extraiu os itens no dados, reconstrói a mensagem para o interpreter
           let mensagemParaPedido = mensagem;
           if (resultado.dados?.itens?.length > 0 && resultado.dados?.nome_cliente) {
+            // ── SANITIZAÇÃO ANTI-ALUCINAÇÃO ──────────────────────────────────
+            // O LLM tem o vício de adicionar "marinho", "jeans", "com bege", etc.
+            // Limpamos os complementos indevidos ANTES de passar ao banco.
+            const sanitizarCor = (cor) => {
+              if (!cor) return cor;
+              // "Azul Jeans" é cor LEGÍTIMA do catálogo — não remover "jeans".
+              return cor
+                .replace(/[\s-]+marinho/ig, '') // "azul marinho"/"azul-marinho" → "azul"
+                .replace(/[\s-]+escuro/ig, '')  // "azul escuro"  → "azul"
+                .replace(/\s+com\s+\w+/ig, '')  // "preto com bege" → "preto"
+                .trim();
+            };
+
+            resultado.dados.itens = resultado.dados.itens.map(i => {
+              const corOriginal = i.cor;
+              const corLimpa = sanitizarCor(i.cor);
+              if (corOriginal !== corLimpa) {
+                logger.info(`[sanitize] Cor corrigida: "${corOriginal}" → "${corLimpa}"`);
+              }
+              return { ...i, cor: corLimpa };
+            });
+            // ─────────────────────────────────────────────────────────────────
+
             const itensStr = resultado.dados.itens
               .map(i => `${i.quantidade} ${i.modelo} ${i.tamanho} ${i.cor}`)
               .join(' e ');
@@ -913,6 +1105,19 @@ async function processarMensagemComContexto(mensagem, clienteWhatsApp) {
         } catch (err) {
           logger.error('[listar_pedidos_abertos] Erro:', err.message);
           return { success: false, resposta: 'Erro ao carregar pedidos em aberto. Tenta de novo?', tipo: 'LISTAR_PEDIDOS' };
+        }
+      }
+
+      case 'listar_entregas_pendentes': {
+        try {
+          // Busca todos os pedidos não finalizados e filtra os pagos sem entrega
+          const todos = await sheetsPedidos.listarTodosPendentes();
+          const resposta = formatarEntregasPendentes(todos);
+          logger.info(`[Claude] listar_entregas_pendentes — ${todos.length} pedido(s) pendentes`);
+          return { success: true, resposta, tipo: 'LISTAR_ENTREGAS' };
+        } catch (err) {
+          logger.error('[listar_entregas_pendentes] Erro:', err.message);
+          return { success: false, resposta: 'Erro ao consultar entregas pendentes. Tenta de novo?', tipo: 'LISTAR_ENTREGAS' };
         }
       }
 
@@ -1110,49 +1315,44 @@ async function processarAtualizarEstoque(modelo, tamanho, cor, quantidade) {
  *   "temos azul marinho?" → lista tudo em azul marinho
  *   "existe ZARA?" → lista todas as cores/tamanhos da ZARA
  */
+// Normaliza string: lowercase + remove acentos (para comparação fuzzy)
+function normStr(s) {
+  return (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+
 async function consultarEstoqueReal(criterio) {
   try {
-    // Lista todos os modelos conhecidos
-    const modelos = ['zara', 'mia', 'lia', 'núbia', 'nubia', 'lívia', 'livia', 'beatriz', 'anne'];
     const tamanhos = ['p', 'm', 'g', 'gg'];
-    const cores = [
-      'preto', 'branco', 'azul', 'cinza', 'rosa', 'roxo', 'vermelho',
-      'amarelo', 'verde', 'laranja', 'bordo', 'bordô', 'marrom', 'bege',
-      'azul marinho', 'turquesa', 'navy', 'magenta', 'nude', 'off-white'
-    ];
 
-    const criterioLower = criterio.toLowerCase().trim();
-
-    // Buscar estoque real
+    // Modelos lidos do banco em tempo real — nunca hardcoded
     const estoqueCompleto = await sheetsEstoque.readAllEstoque();
     if (!estoqueCompleto || estoqueCompleto.length === 0) {
       return 'Desculpe, não consegui consultar o estoque neste momento. Tenta de novo?';
     }
 
-    // Filtrar por critério (modelo OU cor OU tamanho)
+    const modelosBanco = [...new Set(estoqueCompleto.map(i => i.modelo))];
+    const coresBanco   = [...new Set(estoqueCompleto.map(i => i.cor))];
+
+    const criterioNorm = normStr(criterio);
+
+    // Filtrar por critério — comparação case-insensitive e sem acento
     const resultados = estoqueCompleto.filter(item => {
-      const modeloMatch = modelos.some(m => criterioLower.includes(m) && item.modelo.toLowerCase() === m);
-      const corMatch = cores.some(c => criterioLower.includes(c) && item.cor.toLowerCase().includes(c));
-      const tamanhoMatch = tamanhos.some(t => criterioLower.includes(t) && item.tamanho.toLowerCase() === t);
+      const modeloMatch = modelosBanco.some(m => criterioNorm.includes(normStr(m)) && normStr(item.modelo) === normStr(m));
+      const corMatch    = coresBanco.some(c => criterioNorm.includes(normStr(c)) && normStr(item.cor).includes(normStr(c)));
+      const tamanhoMatch = tamanhos.some(t => criterioNorm.includes(t) && item.tamanho.toLowerCase() === t);
 
-      // Se nenhum critério específico foi mencionado, retorna tudo disponível
       if (!modeloMatch && !corMatch && !tamanhoMatch) return item.quantidade_disponivel > 0;
-
-      // Se algum critério foi mencionado, precisa dar match
       return (modeloMatch || corMatch || tamanhoMatch) && item.quantidade_disponivel > 0;
     });
 
     // Nenhum resultado encontrado
     if (resultados.length === 0) {
-      // Extrai o que o usuário procurou para resposta mais específica
       let naoTemQue = criterio;
-      for (const m of modelos) {
-        if (criterioLower.includes(m)) {
-          naoTemQue = m.toUpperCase();
-          break;
-        }
+      for (const m of modelosBanco) {
+        if (criterioNorm.includes(normStr(m))) { naoTemQue = m; break; }
       }
-      return `Desculpe, não temos ${naoTemQue} disponível no momento. Quer tentar outro modelo ou cor? 🙏`;
+      const disponiveis = modelosBanco.join(', ');
+      return `Não temos *${naoTemQue}* disponível no momento.\nModelos em estoque: ${disponiveis} 🙏`;
     }
 
     // Formatar resposta: agrupar por modelo → cor
@@ -1286,6 +1486,53 @@ function formatarPedidosCliente(nome, pedidos) {
  * Formata lista de TODOS os pedidos em aberto (com números para referência)
  * Mostra pedidos que ainda não foram entregues/retirados
  */
+/**
+ * Formata lista de entregas pendentes para WhatsApp.
+ * Mostra apenas pedidos PAGOS que ainda não foram entregues — o que de fato precisa sair.
+ */
+function formatarEntregasPendentes(pedidos) {
+  // Filtrar: pagos e não entregues
+  const paraEntregar = pedidos.filter(p =>
+    p.status_pagamento === 'PAGO' &&
+    p.status_entrega !== 'ENTREGUE' &&
+    p.status_entrega !== 'RETIRADA_NA_LOJA'
+  );
+
+  if (paraEntregar.length === 0) {
+    return '✅ *Nenhuma entrega pendente!*\nTodos os pedidos pagos já foram entregues ou retirados. 🙌';
+  }
+
+  const emojis = ['1️⃣','2️⃣','3️⃣','4️⃣','5️⃣','6️⃣','7️⃣','8️⃣','9️⃣','🔟'];
+  const linhas = [`🚚 *${paraEntregar.length} Entrega(s) Pendente(s)*\n`];
+
+  for (let i = 0; i < paraEntregar.length; i++) {
+    const p = paraEntregar[i];
+    const num = i < emojis.length ? emojis[i] : `${i + 1}.`;
+
+    // Formatar itens
+    let itensStr = p.descricao_pedido || '—';
+    try {
+      const itens = JSON.parse(p.itens_json || '[]');
+      if (itens.length > 0) {
+        itensStr = itens.map(it => `${it.quantidade}x ${it.modelo} ${it.tamanho} ${it.cor}`).join(', ');
+      }
+    } catch (_) {}
+
+    const tipoEntrega = p.tipo_entrega === 'RETIRADA' ? '🏪 Retirada' : '🚚 Entrega';
+    const endereco = p.endereco_entrega ? `\n   📍 ${p.endereco_entrega}` : '';
+
+    linhas.push(
+      `${num} *Pedido #${String(p.numero_pedido).padStart(3,'0')}* — ${p.cliente_nome}`,
+      `   📦 ${itensStr}`,
+      `   💰 R$ ${Number(p.valor_total).toFixed(2)} | ${tipoEntrega}${endereco}`,
+      ''
+    );
+  }
+
+  linhas.push(`💬 Para marcar como entregue: "entregue pedido 001"`);
+  return linhas.join('\n').trim();
+}
+
 function formatarPedidosAbertos(pedidos) {
   if (pedidos.length === 0) {
     return `✅ Nenhum pedido em aberto! Tá tudo quitado e entregue.`;

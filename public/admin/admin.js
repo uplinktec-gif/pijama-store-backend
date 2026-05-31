@@ -12,6 +12,17 @@ let currentSuporteId = null;
 // Estado de filtros (cards do dashboard funcionam como atalhos)
 let estoqueFiltro = { critico: false };
 
+// Motivos válidos para baixa manual de estoque — espelha o backend
+// (src/services/sqlite/estoque.js → MOTIVOS_BAIXA). Fonte da verdade é o
+// servidor: toda baixa é re-validada no POST /estoque/:sku/baixa.
+const MOTIVOS_BAIXA = [
+  'Ação de Marketing / Permuta',
+  'Uso Pessoal / Presente',
+  'Defeito de Fábrica / Avaria',
+  'Troca de Cliente',
+  'Ajuste de Inventário (Perda/Roubo)'
+];
+
 // Initialize
 document.addEventListener('DOMContentLoaded', async () => {
   // Check authentication
@@ -654,10 +665,10 @@ async function loadBaixas() {
   const data = await apiFetch(`/estoque/baixas${qs ? `?${qs}` : ''}`);
   if (!data) return;
 
-  // Popular o filtro de motivos uma vez (a partir da fonte do backend)
+  // Popular o filtro de motivos uma vez (a partir da fonte do backend — fonte da verdade)
   const filtro = document.getElementById('baixaMotivoFilter');
   if (filtro && filtro.options.length <= 1) {
-    const motivos = data.motivos || MOTIVOS_BAIXA;
+    const motivos = Array.isArray(data.motivos) ? data.motivos : [];
     filtro.innerHTML = '<option value="">Todos os Motivos</option>' +
       motivos.map(m => `<option value="${m}">${m}</option>`).join('');
   }

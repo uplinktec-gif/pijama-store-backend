@@ -28,6 +28,9 @@ export function initializeDatabase() {
 
     // Habilitar WAL mode: melhor performance em leituras/escritas concorrentes
     db.pragma('journal_mode = WAL');
+    // Espera até 5s antes de desistir numa colisão de escrita (bot + site simultâneos)
+    // em vez de lançar SQLITE_BUSY imediatamente. Blindagem de concorrência.
+    db.pragma('busy_timeout = 5000');
     // Garantir integridade referencial
     db.pragma('foreign_keys = ON');
 

@@ -74,7 +74,10 @@ async function processarMensagemPedido(mensagem, clienteWhatsApp) {
           let pergunta = 'Faltou alguma informação do produto 😊\n';
           if (itemIncompleto.includes('tamanho')) pergunta += 'Qual *tamanho*? (P, M, G ou GG)';
           else if (itemIncompleto.includes('cor')) pergunta += 'Qual *cor*? (azul marinho, preto, bordô, cinza ou marrom)';
-          else if (itemIncompleto.includes('modelo')) pergunta += 'Qual *modelo*? (ZARA, MIA, LIA, NÚBIA, LÍVIA, BEATRIZ ou ANNE)';
+          else if (itemIncompleto.includes('modelo')) {
+            const modelos = estoqueService.listarModelosDisponiveis().join(', ');
+            pergunta += `Qual *modelo*? (${modelos})`;
+          }
           return {
             success: false,
             mensagem_usuario: pergunta,
