@@ -84,13 +84,16 @@ function agendarAlertasEstoque() {
       }
 
       // Verificar itens zerados diretamente do estoque
+      // FIX Sprint 0: readAllEstoque/mapItem retornam campos em minúsculas
+      // (quantidade_disponivel, status, modelo...). Os nomes em MAIÚSCULAS
+      // nunca casavam → o alerta de zerados estava morto. Corrigido.
       const todosItens = await estoqueSheets.readAllEstoque();
-      const itensZerados = todosItens.filter(i => i.QUANTIDADE_DISPONIVEL === 0 && (i.STATUS || '').toLowerCase() === 'ativo');
+      const itensZerados = todosItens.filter(i => i.quantidade_disponivel === 0 && (i.status || '').toLowerCase() === 'ativo');
 
       if (itensZerados.length > 0) {
         let mensagemZerados = `🚨 *SEM ESTOQUE!*\n\nOs seguintes itens estão zerados:\n\n`;
         itensZerados.slice(0, 10).forEach(i => {
-          mensagemZerados += `❌ *${i.MODELO}*\n   Tamanho: ${i.TAMANHO}\n   Cor: ${i.COR}\n\n`;
+          mensagemZerados += `❌ *${i.modelo}*\n   Tamanho: ${i.tamanho}\n   Cor: ${i.cor}\n\n`;
         });
         await senderService.enviarMensagem(NUMERO_FELIPE, mensagemZerados);
       }
