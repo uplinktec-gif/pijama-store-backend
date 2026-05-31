@@ -397,16 +397,17 @@ function createTables() {
       FOREIGN KEY(categoria_id) REFERENCES categorias_financeiras(id)
     );
 
-    -- Categorias padrão (idempotente — INSERT OR IGNORE pelo nome único)
+    -- Plano de contas oficial (idempotente — INSERT OR IGNORE pelo nome único)
     INSERT OR IGNORE INTO categorias_financeiras (nome, tipo, cor) VALUES
-      ('Vendas',        'RECEITA', '#16a34a'),
-      ('Outras Receitas','RECEITA', '#22c55e'),
-      ('Fornecedores',  'DESPESA', '#dc2626'),
-      ('Frete',         'DESPESA', '#ea580c'),
-      ('Impostos',      'DESPESA', '#b91c1c'),
-      ('Marketing',     'DESPESA', '#7c3aed'),
-      ('Despesas Gerais','DESPESA', '#6b7280'),
-      ('Pró-labore',    'DESPESA', '#0891b2');
+      ('Receita de Vendas',     'RECEITA', '#16a34a'),
+      ('Aporte de Capital',     'RECEITA', '#22c55e'),
+      ('Fornecedores/Fábrica',  'DESPESA', '#dc2626'),
+      ('Frete/Logística',       'DESPESA', '#ea580c'),
+      ('Embalagens/Insumos',    'DESPESA', '#d97706'),
+      ('Marketing/Tráfego Pago','DESPESA', '#7c3aed'),
+      ('Pró-labore',            'DESPESA', '#0891b2'),
+      ('Taxas e Impostos',      'DESPESA', '#b91c1c'),
+      ('Assinaturas/Software',  'DESPESA', '#2563eb');
 
     CREATE INDEX IF NOT EXISTS idx_pedidos_whatsapp ON pedidos(cliente_whatsapp);
     CREATE INDEX IF NOT EXISTS idx_pedidos_status_pagamento ON pedidos(status_pagamento);
@@ -449,6 +450,18 @@ function runMigrations() {
   // v1 — OTP via WhatsApp para login frictionless
   safe('ALTER TABLE clientes ADD COLUMN otp_atual TEXT');
   safe('ALTER TABLE clientes ADD COLUMN otp_expira_em TEXT');
+
+  // v2 — Remove categorias do seed provisório antigo que não estão no plano
+  // oficial, APENAS se não houver transação vinculada (preserva dados reais).
+  try {
+    const obsoletas = ['Vendas','Outras Receitas','Fornecedores','Frete','Impostos','Marketing','Despesas Gerais'];
+    const del = db.prepare(
+      `DELETE FROM categorias_financeiras
+       WHERE nome = ?
+         AND NOT EXISTS (SELECT 1 FROM transacoes_financeiras t WHERE t.categoria_id = categorias_financeiras.id)`
+    );
+    for (const nome of obsoletas) del.run(nome);
+  } catch (_) { /* tabelas podem não existir em bases muito antigas */ }
 
   logger.debug('✓ Migrações executadas');
 }

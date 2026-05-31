@@ -49,6 +49,10 @@
           <span class="icon">💬</span>
           <span class="label">Suporte</span>
         </a>
+        <a href="#financeiro" class="nav-link" data-section="financeiro">
+          <span class="icon">💰</span>
+          <span class="label">Financeiro</span>
+        </a>
       </nav>
 
       <div class="sidebar-footer">
@@ -274,6 +278,50 @@
                 <th>Status</th>
                 <th>Data</th>
                 <th>Ações</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Financeiro Section -->
+      <section id="financeiro-section" class="section">
+        <!-- Dashboard gerencial -->
+        <div class="fin-cards" id="finCards"></div>
+
+        <!-- Lançamentos -->
+        <div class="section-toolbar" style="margin-top:24px;">
+          <div class="filters">
+            <select id="finStatusFilter" class="select-box">
+              <option value="PENDENTE">Pendentes de categorização</option>
+              <option value="CATEGORIZADO">Categorizados</option>
+              <option value="">Todos</option>
+            </select>
+            <select id="finTipoFilter" class="select-box">
+              <option value="">Crédito + Débito</option>
+              <option value="CREDITO">Só Crédito</option>
+              <option value="DEBITO">Só Débito</option>
+            </select>
+            <input type="date" id="finInicio" class="select-box" title="Data inicial">
+            <input type="date" id="finFim" class="select-box" title="Data final">
+          </div>
+          <div style="display:flex; gap:10px; align-items:center;">
+            <input type="text" id="finBusca" class="search-box" placeholder="Buscar contraparte...">
+            <button id="finImportarBtn" class="btn btn-primary">⬇️ Importar extrato</button>
+          </div>
+        </div>
+        <div id="finResumo" class="baixas-resumo"></div>
+        <div class="table-responsive">
+          <table id="finTable" class="data-table">
+            <thead>
+              <tr>
+                <th>Data</th>
+                <th>Tipo</th>
+                <th>Valor</th>
+                <th>Contraparte</th>
+                <th>Descrição</th>
+                <th>Categoria</th>
               </tr>
             </thead>
             <tbody></tbody>

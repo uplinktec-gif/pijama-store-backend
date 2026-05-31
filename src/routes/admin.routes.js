@@ -24,6 +24,13 @@ import {
   listLeads,
   updateLeadStatus
 } from '../controllers/admin.controller.js';
+import {
+  getCategorias,
+  listTransacoes,
+  setCategoria,
+  importar as importarFinanceiro,
+  dashboard as dashboardFinanceiro
+} from '../controllers/financeiro.controller.js';
 
 const router = Router();
 
@@ -69,5 +76,12 @@ router.get('/clientes/:id/pedidos', getClientePedidos);
 // LEADS  →  /admin/api/leads
 router.get('/leads', listLeads);
 router.patch('/leads/:id/status', updateLeadStatus);
+
+// FINANCEIRO  →  /admin/api/financeiro
+router.get('/financeiro/categorias', getCategorias);
+router.get('/financeiro/transacoes', listTransacoes);
+router.patch('/financeiro/transacoes/:id/categoria', setCategoria);
+router.post('/financeiro/importar', importarFinanceiro);
+router.get('/financeiro/dashboard', dashboardFinanceiro);
 
 export default router;

@@ -671,6 +671,13 @@ body {
   color: #0c5460;
 }
 
+/* Cards do dashboard financeiro */
+.fin-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+}
+
 /* Furo de grade — SKU virtual ainda não cadastrado para essa cor */
 .badge-furo {
   background-color: #ffe5e0;
