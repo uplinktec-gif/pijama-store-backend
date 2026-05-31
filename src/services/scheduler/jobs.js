@@ -3,6 +3,7 @@ import { logger } from '../../utils/logger.js';
 import * as senderService from '../whatsapp/sender.js';
 import { gerarRelatorioDiario, analisarEstoque, analisarVendas } from '../business/analytics.js';
 import * as estoqueSheets from '../sqlite/estoque.js';
+import { listarInadimplentes } from '../sqlite/pedidos.js';
 import { gerarRecomendacaoCliente } from '../business/recomendacoes.js';
 import * as clientesSheets from '../sqlite/clientes.js';
 import { realizarBackup } from '../backup/backupSQLite.js';
@@ -308,6 +309,62 @@ function agendarRelatorioSemanal() {
 }
 
 /**
+ * Aging em linguagem natural a partir da data do pedido (ISO).
+ */
+function agingTexto(dataISO) {
+  if (!dataISO) return 'data ?';
+  const dias = Math.floor((Date.now() - new Date(dataISO).getTime()) / 86400000);
+  if (dias <= 0) return 'hoje';
+  if (dias === 1) return 'há 1 dia';
+  return `há ${dias} dias`;
+}
+
+/**
+ * Monta a mensagem de cobrança (lista nominal de inadimplentes com aging).
+ * Pura — não envia nada. Usada pelo job e pelo teste manual.
+ */
+async function gerarMensagemCobranca() {
+  const lista = await listarInadimplentes();
+  if (!lista.length) {
+    return '✅ *Cobrança 21h* — Nenhum pedido em aberto. Tudo pago! 🎉';
+  }
+  const linhas = [`🔔 *COBRANÇA — ${lista.length} pedido(s) em aberto*\n`];
+  for (const p of lista) {
+    let itens = p.descricao_pedido || '';
+    try {
+      const j = JSON.parse(p.itens_json || '[]');
+      if (j.length) itens = j.map(i => `${i.quantidade}x ${i.modelo} ${i.tamanho} ${i.cor}`).join(', ');
+    } catch (_) {}
+    const num = String(p.numero_pedido).padStart(3, '0');
+    const valor = Number(p.valor_total || 0).toFixed(2);
+    linhas.push(`• *${p.cliente_nome || 'Cliente'}* — #${num} — ${itens} — R$ ${valor} — _${agingTexto(p.data_pedido)}_`);
+  }
+  linhas.push('\n_Cruze com o extrato PJ para a cobrança ativa._');
+  return linhas.join('\n');
+}
+
+/**
+ * Envia a cobrança para os fundadores (Felipe e Júlly).
+ */
+async function enviarCobrancaDiaria() {
+  try {
+    const msg = await gerarMensagemCobranca();
+    await senderService.enviarMensagem(NUMERO_FELIPE, msg);
+    await senderService.enviarMensagem(NUMERO_JULLY, msg);
+    logger.info('✓ Cobrança diária (21h) enviada para Felipe e Júlly');
+  } catch (error) {
+    logger.error('Erro ao enviar cobrança diária:', error.message);
+  }
+}
+
+/**
+ * Agenda a cobrança de inadimplentes às 21h de Boa Vista (01:00 UTC).
+ */
+function agendarCobrancaDiaria() {
+  return schedule.scheduleJob('0 1 * * *' /* 21h Boa Vista */, enviarCobrancaDiaria);
+}
+
+/**
  * Inicializa todos os jobs agendados (com proteção contra duplicação)
  */
 function inicializarScheduler() {
@@ -376,6 +433,15 @@ function inicializarScheduler() {
       jobsAgendados.add('relatorio-semanal');
     }
 
+    // Agendar cobrança de inadimplentes às 21h
+    if (!jobsAgendados.has('cobranca-diaria')) {
+      jobs.push({
+        nome: 'Cobrança Inadimplentes (21h)',
+        job: agendarCobrancaDiaria()
+      });
+      jobsAgendados.add('cobranca-diaria');
+    }
+
     logger.info(`✓ ${jobs.length} tarefas agendadas:`);
     jobs.forEach(j => logger.info(`   • ${j.nome}`));
 
@@ -399,4 +465,4 @@ function cancelarTodosJobs() {
   }
 }
 
-export { inicializarScheduler, cancelarTodosJobs };
+export { inicializarScheduler, cancelarTodosJobs, gerarMensagemCobranca, enviarCobrancaDiaria };
