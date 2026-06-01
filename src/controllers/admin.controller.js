@@ -1,6 +1,7 @@
 import { query, queryOne, run } from '../config/database.js';
 import { logger } from '../utils/logger.js';
 import { env } from '../config/env.js';
+import { cancelarPedido } from '../services/business/pedidos.js';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { baixarEstoque, listarLogEstoque, MOTIVOS_BAIXA } from '../services/sqlite/estoque.js';
@@ -476,6 +477,12 @@ export async function updatePagamento(req, res) {
   try {
     const { numero } = req.params;
     const { status, forma_pagamento } = req.body;
+    // GATILHO DE ESTORNO: cancelamento devolve o estoque automaticamente
+    if ((status || '').toUpperCase() === 'CANCELADO') {
+      const r = await cancelarPedido(parseInt(numero), { usuario: req.adminUser?.username || 'admin' });
+      if (!r.success) return res.status(400).json({ error: r.error });
+      return res.json({ success: true, numero: parseInt(numero), status: 'CANCELADO', estornado: r.estornado });
+    }
     run('UPDATE pedidos SET status_pagamento = ?, forma_pagamento = ?, data_pagamento = datetime("now") WHERE numero_pedido = ?', [status, forma_pagamento, numero]);
     res.json({ success: true, numero, status, forma_pagamento });
   } catch (err) {
@@ -528,6 +535,13 @@ export async function updateStatusPedido(req, res) {
     const { status_pagamento, status_entrega } = req.body;
     if (!status_pagamento && !status_entrega) {
       return res.status(400).json({ error: 'Informe status_pagamento ou status_entrega' });
+    }
+    // GATILHO DE ESTORNO: qualquer campo marcado como CANCELADO devolve o estoque
+    if ((status_pagamento || '').toUpperCase() === 'CANCELADO' || (status_entrega || '').toUpperCase() === 'CANCELADO') {
+      const r = await cancelarPedido(parseInt(numero), { usuario: req.adminUser?.username || 'admin' });
+      if (!r.success) return res.status(400).json({ error: r.error });
+      logger.info(`[admin] Pedido #${numero} CANCELADO com estorno (${r.estornado?.length || 0} item(ns))`);
+      return res.json({ success: true, numero: parseInt(numero), status: 'CANCELADO', estornado: r.estornado });
     }
     if (status_pagamento) {
       run('UPDATE pedidos SET status_pagamento = ?, updated_at = datetime("now") WHERE numero_pedido = ?', [status_pagamento, numero]);

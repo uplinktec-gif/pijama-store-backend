@@ -21,6 +21,13 @@ const FAST_PATH_RULES = [
   // Saudações simples
   { regex: /^(oi|olá|ola|hey|bom dia|boa tarde|boa noite|eai|e aí|menu|ajuda|socorro|opa|oii|oeee?)$/i, action: 'saudacao' },
 
+  // ⭐ CANCELAR PEDIDO — "cancelar pedido #16", "cancela o pedido 16"
+  {
+    regex: /cancela(?:r)?\s+(?:o\s+)?pedido\s+#?(\d+)/i,
+    action: 'cancelar_pedido',
+    extract: m => ({ numero_pedido: parseInt(m[1]) })
+  },
+
   // ⭐ SUGESTÃO DE REPOSIÇÃO — "o que preciso repor/comprar", "reposição"
   {
     regex: /(?:o\s+que\s+(?:preciso|devo|tenho\s+que)\s+(?:repor|comprar)|sugest[ãa]o\s+de\s+reposi[çc][ãa]o|reposi[çc][ãa]o|o\s+que\s+comprar|o\s+que\s+repor|lista\s+de\s+compras?)/i,

@@ -81,6 +81,14 @@ async function processarMensagemComContexto(mensagem, clienteWhatsApp) {
         };
       }
 
+      // ⭐ Cancelar pedido — estorno REAL (devolve estoque + grava log + marca CANCELADO)
+      if (fp.action === 'cancelar_pedido') {
+        const num = fp.dados.numero_pedido;
+        const r = await pedidosService.cancelarPedido(num, { usuario: clienteWhatsApp.slice(-4) });
+        logger.info(`[FastPath] Cancelar #${num} — ${r.success ? 'ok' : 'falha'} em ${Date.now() - inicio}ms`);
+        return { success: r.success, resposta: r.mensagem_usuario, tipo: 'CANCELAR_PEDIDO' };
+      }
+
       // ⭐ Sugestão de reposição (Curva ABC — giro 30 dias)
       if (fp.action === 'reposicao') {
         try {
