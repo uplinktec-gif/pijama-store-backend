@@ -76,6 +76,75 @@ export async function cancelarPedido(numeroPedido, { usuario = 'admin' } = {}) {
   }
 }
 
+// Estados de entrega que significam "a peça saiu do prédio" → baixa definitiva
+const ESTADOS_SAIDA = ['ENTREGUE', 'ENVIADO', 'RETIRADA_NA_LOJA'];
+
+/**
+ * Dá baixa DEFINITIVA no estoque quando o pedido é entregue/enviado/retirado.
+ * Subtrai a quantidade de AMBAS as colunas: quantidade_total E quantidade_reservada
+ * (a peça reservada deixa de existir fisicamente). disp = total - reservada não muda.
+ * Grava no log_estoque. Idempotente: só baixa se ainda não estava num estado de saída.
+ *
+ * @returns {Promise<{success:boolean, numero?:number, baixado?:Array, jaSaiu?:boolean, error?:string}>}
+ */
+export async function entregarPedido(numeroPedido, novoStatus = 'ENTREGUE') {
+  try {
+    const pedido = await pedidosSheets.findPorNumeroPedido(numeroPedido);
+    if (!pedido) return { success: false, error: `Pedido #${numeroPedido} não encontrado` };
+
+    // Idempotência: se já está num estado de saída, não baixa de novo
+    if (ESTADOS_SAIDA.includes((pedido.status_entrega || '').toUpperCase())) {
+      return { success: true, numero: numeroPedido, baixado: [], jaSaiu: true };
+    }
+    if ((pedido.status_pagamento || '').toUpperCase() === 'CANCELADO') {
+      return { success: false, error: 'Pedido cancelado não pode ser entregue' };
+    }
+
+    let itens = [];
+    try { itens = JSON.parse(pedido.itens_json || '[]'); } catch (_) { itens = []; }
+
+    const baixado = [];
+    const now = new Date().toISOString();
+    for (const it of itens) {
+      const { modelo, tamanho, cor } = it;
+      const qtd = Number(it.quantidade) || 1;
+      if (!modelo || !tamanho || !cor) continue;
+
+      const sku = estoqueService.generateSKU(modelo, tamanho, cor);
+      // Baixa definitiva: sai do total E libera a reserva (a peça foi embora)
+      run(
+        `UPDATE estoque
+            SET quantidade_total     = MAX(0, quantidade_total - ?),
+                quantidade_reservada = MAX(0, quantidade_reservada - ?),
+                updated_at = ?
+          WHERE sku = ?`,
+        [qtd, qtd, now, sku]
+      );
+      try {
+        run(
+          `INSERT INTO log_estoque (data_hora, sku, modelo, tamanho, cor, quantidade, motivo, observacao, usuario)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [now, sku, modelo, tamanho, cor, qtd, 'Baixa definitiva por Entrega', `Pedido #${numeroPedido} ${novoStatus}`, 'sistema']
+        );
+      } catch (e) {
+        logger.warn('[entregarPedido] Falha ao gravar log (baixa feita):', e.message);
+      }
+      baixado.push({ modelo, tamanho, cor, quantidade: qtd });
+    }
+
+    run(
+      `UPDATE pedidos SET status_entrega = ?, data_entrega = ?, updated_at = ? WHERE numero_pedido = ?`,
+      [novoStatus, now, now, numeroPedido]
+    );
+
+    logger.info(`[entregarPedido] #${numeroPedido} ${novoStatus} — ${baixado.length} item(ns) baixado(s) do inventário`);
+    return { success: true, numero: numeroPedido, baixado };
+  } catch (error) {
+    logger.error('[entregarPedido] Erro:', error.message);
+    return { success: false, error: error.message };
+  }
+}
+
 /**
  * Fluxo completo: interpretar → validar → criar pedido
  */

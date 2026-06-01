@@ -229,7 +229,8 @@ async function processarMensagemComContexto(mensagem, clienteWhatsApp) {
       if (fp.action === 'atualizar_entrega') {
         const { numero_pedido, tipo_entrega } = fp.dados;
         if (numero_pedido) {
-          await sheetsPedidos.atualizarStatusEntrega(numero_pedido, tipo_entrega).catch(() => {});
+          // Baixa definitiva no inventário (subtrai total + reservada) + log
+          await pedidosService.entregarPedido(numero_pedido, tipo_entrega).catch(() => {});
           notificarClienteEntrega(numero_pedido, tipo_entrega).catch(() => {});
           const emoji = tipo_entrega === 'ENTREGUE' ? '✅' : '🏪';
           logger.info(`[FastPath] Entrega #${numero_pedido} em ${Date.now() - inicio}ms`);
@@ -527,7 +528,8 @@ async function processarMensagemComContexto(mensagem, clienteWhatsApp) {
         const tipoEntrega = resultado.dados?.tipo_entrega || 'ENTREGUE';
 
         if (numPedido) {
-          const upd = await sheetsPedidos.atualizarStatusEntrega(numPedido, tipoEntrega);
+          // Baixa definitiva no inventário (subtrai total + reservada) + log
+          const upd = await pedidosService.entregarPedido(numPedido, tipoEntrega);
           if (!upd.success) {
             return { success: false, resposta: `Não encontrei o pedido #${numPedido}. Confirma o número?`, tipo: 'ATUALIZAR_ENTREGA' };
           }

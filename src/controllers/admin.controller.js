@@ -1,7 +1,10 @@
 import { query, queryOne, run } from '../config/database.js';
 import { logger } from '../utils/logger.js';
 import { env } from '../config/env.js';
-import { cancelarPedido } from '../services/business/pedidos.js';
+import { cancelarPedido, entregarPedido } from '../services/business/pedidos.js';
+
+// Estados de entrega que disparam baixa definitiva no inventário
+const ESTADOS_SAIDA_ADMIN = ['ENTREGUE', 'ENVIADO', 'RETIRADA_NA_LOJA'];
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { baixarEstoque, listarLogEstoque, MOTIVOS_BAIXA } from '../services/sqlite/estoque.js';
@@ -495,6 +498,12 @@ export async function updateEntrega(req, res) {
   try {
     const { numero } = req.params;
     const { status } = req.body;
+    // GATILHO DE SAÍDA: entrega/envio/retirada dá baixa definitiva no inventário
+    if (ESTADOS_SAIDA_ADMIN.includes((status || '').toUpperCase())) {
+      const r = await entregarPedido(parseInt(numero), status.toUpperCase());
+      if (!r.success) return res.status(400).json({ error: r.error });
+      return res.json({ success: true, numero: parseInt(numero), status, baixado: r.baixado });
+    }
     run('UPDATE pedidos SET status_entrega = ?, data_entrega = datetime("now") WHERE numero_pedido = ?', [status, numero]);
     res.json({ success: true, numero, status });
   } catch (err) {
@@ -547,7 +556,14 @@ export async function updateStatusPedido(req, res) {
       run('UPDATE pedidos SET status_pagamento = ?, updated_at = datetime("now") WHERE numero_pedido = ?', [status_pagamento, numero]);
     }
     if (status_entrega) {
-      run('UPDATE pedidos SET status_entrega = ?, updated_at = datetime("now") WHERE numero_pedido = ?', [status_entrega, numero]);
+      // GATILHO DE SAÍDA: baixa definitiva quando entregue/enviado/retirado
+      if (ESTADOS_SAIDA_ADMIN.includes(status_entrega.toUpperCase())) {
+        const r = await entregarPedido(parseInt(numero), status_entrega.toUpperCase());
+        if (!r.success) return res.status(400).json({ error: r.error });
+        logger.info(`[admin] Pedido #${numero} ${status_entrega} — baixa definitiva (${r.baixado?.length || 0} item(ns))`);
+      } else {
+        run('UPDATE pedidos SET status_entrega = ?, updated_at = datetime("now") WHERE numero_pedido = ?', [status_entrega, numero]);
+      }
     }
     logger.info(`[admin] Pedido #${numero} status atualizado`);
     res.json({ success: true, numero: parseInt(numero), status_pagamento, status_entrega });
