@@ -81,6 +81,27 @@ async function processarMensagemComContexto(mensagem, clienteWhatsApp) {
         };
       }
 
+      // ⭐ Cancelar pedido — estorno REAL (devolve estoque + grava log + marca CANCELADO)
+      if (fp.action === 'cancelar_pedido') {
+        const num = fp.dados.numero_pedido;
+        const r = await pedidosService.cancelarPedido(num, { usuario: clienteWhatsApp.slice(-4) });
+        logger.info(`[FastPath] Cancelar #${num} — ${r.success ? 'ok' : 'falha'} em ${Date.now() - inicio}ms`);
+        return { success: r.success, resposta: r.mensagem_usuario, tipo: 'CANCELAR_PEDIDO' };
+      }
+
+      // ⭐ Sugestão de reposição (Curva ABC — giro 30 dias)
+      if (fp.action === 'reposicao') {
+        try {
+          const { gerarMensagemReposicao } = await import('../reposicao.js');
+          const resposta = await gerarMensagemReposicao();
+          logger.info(`[FastPath] Reposição em ${Date.now() - inicio}ms`);
+          return { success: true, resposta, tipo: 'REPOSICAO' };
+        } catch (err) {
+          logger.error('[FastPath] Erro reposição:', err.message);
+          return { success: false, resposta: 'Erro ao calcular reposição. Tenta de novo?', tipo: 'REPOSICAO' };
+        }
+      }
+
       // ⭐ Alertas de estoque (consulta banco real — mostra o que está acabando)
       if (fp.action === 'alertas_estoque') {
         try {
@@ -208,7 +229,8 @@ async function processarMensagemComContexto(mensagem, clienteWhatsApp) {
       if (fp.action === 'atualizar_entrega') {
         const { numero_pedido, tipo_entrega } = fp.dados;
         if (numero_pedido) {
-          await sheetsPedidos.atualizarStatusEntrega(numero_pedido, tipo_entrega).catch(() => {});
+          // Baixa definitiva no inventário (subtrai total + reservada) + log
+          await pedidosService.entregarPedido(numero_pedido, tipo_entrega).catch(() => {});
           notificarClienteEntrega(numero_pedido, tipo_entrega).catch(() => {});
           const emoji = tipo_entrega === 'ENTREGUE' ? '✅' : '🏪';
           logger.info(`[FastPath] Entrega #${numero_pedido} em ${Date.now() - inicio}ms`);
@@ -506,7 +528,8 @@ async function processarMensagemComContexto(mensagem, clienteWhatsApp) {
         const tipoEntrega = resultado.dados?.tipo_entrega || 'ENTREGUE';
 
         if (numPedido) {
-          const upd = await sheetsPedidos.atualizarStatusEntrega(numPedido, tipoEntrega);
+          // Baixa definitiva no inventário (subtrai total + reservada) + log
+          const upd = await pedidosService.entregarPedido(numPedido, tipoEntrega);
           if (!upd.success) {
             return { success: false, resposta: `Não encontrei o pedido #${numPedido}. Confirma o número?`, tipo: 'ATUALIZAR_ENTREGA' };
           }

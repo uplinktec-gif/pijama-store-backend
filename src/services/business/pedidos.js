@@ -6,6 +6,144 @@ import * as leadsService from '../sqlite/leads.js';
 import * as interpreterService from '../nlp/interpreter.js';
 import * as validatorService from '../nlp/validator.js';
 import { enviarMensagem } from '../whatsapp/sender.js';
+import { run } from '../../config/database.js';
+
+/**
+ * Cancela um pedido com ESTORNO automático de estoque.
+ * - Libera a reserva de cada item (devolve ao disponível)
+ * - Grava no log_estoque o motivo "Estorno automático por Cancelamento de Pedido"
+ * - Marca o pedido como CANCELADO (pagamento e entrega)
+ * Idempotente: se já estiver CANCELADO, não estorna de novo.
+ *
+ * Usado pelo painel admin e pelo bot (fonte única do cancelamento).
+ * @returns {Promise<{success:boolean, numero?:number, estornado?:Array, mensagem_usuario?:string, error?:string}>}
+ */
+export async function cancelarPedido(numeroPedido, { usuario = 'admin' } = {}) {
+  try {
+    const pedido = await pedidosSheets.findPorNumeroPedido(numeroPedido);
+    if (!pedido) {
+      return { success: false, error: `Pedido #${numeroPedido} não encontrado`, mensagem_usuario: `Não encontrei o pedido #${numeroPedido}.` };
+    }
+    if (pedido.status_pagamento === 'CANCELADO') {
+      return { success: true, numero: numeroPedido, estornado: [], jaCancelado: true, mensagem_usuario: `Pedido #${numeroPedido} já estava cancelado.` };
+    }
+
+    // Itens do pedido
+    let itens = [];
+    try { itens = JSON.parse(pedido.itens_json || '[]'); } catch (_) { itens = []; }
+
+    const estornado = [];
+    const now = new Date().toISOString();
+    for (const it of itens) {
+      const modelo = it.modelo, tamanho = it.tamanho, cor = it.cor;
+      const qtd = Number(it.quantidade) || 1;
+      if (!modelo || !tamanho || !cor) continue;
+
+      // 1) Devolve a reserva ao disponível
+      await estoqueService.liberarEstoque(modelo, tamanho, cor, qtd);
+
+      // 2) Rastreabilidade no log_estoque
+      try {
+        const sku = estoqueService.generateSKU(modelo, tamanho, cor);
+        run(
+          `INSERT INTO log_estoque (data_hora, sku, modelo, tamanho, cor, quantidade, motivo, observacao, usuario)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [now, sku, modelo, tamanho, cor, qtd, 'Estorno automático por Cancelamento de Pedido', `Pedido #${numeroPedido} cancelado`, usuario]
+        );
+      } catch (e) {
+        logger.warn('[cancelarPedido] Falha ao gravar log_estoque (estorno feito):', e.message);
+      }
+      estornado.push({ modelo, tamanho, cor, quantidade: qtd });
+    }
+
+    // 3) Marca o pedido como CANCELADO (pagamento e entrega)
+    run(
+      `UPDATE pedidos SET status_pagamento = 'CANCELADO', status_entrega = 'CANCELADO', updated_at = ? WHERE numero_pedido = ?`,
+      [now, numeroPedido]
+    );
+
+    logger.info(`[cancelarPedido] #${numeroPedido} cancelado — ${estornado.length} item(ns) estornado(s) ao estoque`);
+    const resumo = estornado.map(e => `${e.quantidade}x ${e.modelo} ${e.tamanho} ${e.cor}`).join(', ');
+    return {
+      success: true,
+      numero: numeroPedido,
+      estornado,
+      mensagem_usuario: `✅ Pedido *#${numeroPedido}* cancelado.${resumo ? `\n↩️ Estoque devolvido: ${resumo}` : ''}`
+    };
+  } catch (error) {
+    logger.error('[cancelarPedido] Erro:', error.message);
+    return { success: false, error: error.message, mensagem_usuario: 'Erro ao cancelar o pedido. Tente novamente.' };
+  }
+}
+
+// Estados de entrega que significam "a peça saiu do prédio" → baixa definitiva
+const ESTADOS_SAIDA = ['ENTREGUE', 'ENVIADO', 'RETIRADA_NA_LOJA'];
+
+/**
+ * Dá baixa DEFINITIVA no estoque quando o pedido é entregue/enviado/retirado.
+ * Subtrai a quantidade de AMBAS as colunas: quantidade_total E quantidade_reservada
+ * (a peça reservada deixa de existir fisicamente). disp = total - reservada não muda.
+ * Grava no log_estoque. Idempotente: só baixa se ainda não estava num estado de saída.
+ *
+ * @returns {Promise<{success:boolean, numero?:number, baixado?:Array, jaSaiu?:boolean, error?:string}>}
+ */
+export async function entregarPedido(numeroPedido, novoStatus = 'ENTREGUE') {
+  try {
+    const pedido = await pedidosSheets.findPorNumeroPedido(numeroPedido);
+    if (!pedido) return { success: false, error: `Pedido #${numeroPedido} não encontrado` };
+
+    // Idempotência: se já está num estado de saída, não baixa de novo
+    if (ESTADOS_SAIDA.includes((pedido.status_entrega || '').toUpperCase())) {
+      return { success: true, numero: numeroPedido, baixado: [], jaSaiu: true };
+    }
+    if ((pedido.status_pagamento || '').toUpperCase() === 'CANCELADO') {
+      return { success: false, error: 'Pedido cancelado não pode ser entregue' };
+    }
+
+    let itens = [];
+    try { itens = JSON.parse(pedido.itens_json || '[]'); } catch (_) { itens = []; }
+
+    const baixado = [];
+    const now = new Date().toISOString();
+    for (const it of itens) {
+      const { modelo, tamanho, cor } = it;
+      const qtd = Number(it.quantidade) || 1;
+      if (!modelo || !tamanho || !cor) continue;
+
+      const sku = estoqueService.generateSKU(modelo, tamanho, cor);
+      // Baixa definitiva: sai do total E libera a reserva (a peça foi embora)
+      run(
+        `UPDATE estoque
+            SET quantidade_total     = MAX(0, quantidade_total - ?),
+                quantidade_reservada = MAX(0, quantidade_reservada - ?),
+                updated_at = ?
+          WHERE sku = ?`,
+        [qtd, qtd, now, sku]
+      );
+      try {
+        run(
+          `INSERT INTO log_estoque (data_hora, sku, modelo, tamanho, cor, quantidade, motivo, observacao, usuario)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [now, sku, modelo, tamanho, cor, qtd, 'Baixa definitiva por Entrega', `Pedido #${numeroPedido} ${novoStatus}`, 'sistema']
+        );
+      } catch (e) {
+        logger.warn('[entregarPedido] Falha ao gravar log (baixa feita):', e.message);
+      }
+      baixado.push({ modelo, tamanho, cor, quantidade: qtd });
+    }
+
+    run(
+      `UPDATE pedidos SET status_entrega = ?, data_entrega = ?, updated_at = ? WHERE numero_pedido = ?`,
+      [novoStatus, now, now, numeroPedido]
+    );
+
+    logger.info(`[entregarPedido] #${numeroPedido} ${novoStatus} — ${baixado.length} item(ns) baixado(s) do inventário`);
+    return { success: true, numero: numeroPedido, baixado };
+  } catch (error) {
+    logger.error('[entregarPedido] Erro:', error.message);
+    return { success: false, error: error.message };
+  }
+}
 
 /**
  * Fluxo completo: interpretar → validar → criar pedido

@@ -160,6 +160,23 @@ export async function listarTodosPendentes() {
 }
 
 /**
+ * Lista inadimplentes: TODOS os pedidos em aberto (não pagos), de qualquer data.
+ * Exclui pagos e cancelados. Ordena do mais antigo (maior aging) para o mais novo.
+ */
+export async function listarInadimplentes() {
+  try {
+    return query(
+      `SELECT * FROM pedidos
+       WHERE status_pagamento NOT IN ('PAGO', 'CANCELADO')
+       ORDER BY data_pedido ASC, numero_pedido ASC`
+    ).map(mapPedido);
+  } catch (error) {
+    logger.error('[sqlite:pedidos] listarInadimplentes:', error.message);
+    return [];
+  }
+}
+
+/**
  * Busca pedidos por WhatsApp do cliente
  */
 export async function buscarPedidosPorWhatsApp(whatsapp) {
