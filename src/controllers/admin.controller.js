@@ -2,6 +2,7 @@ import { query, queryOne, run } from '../config/database.js';
 import { logger } from '../utils/logger.js';
 import { env } from '../config/env.js';
 import { cancelarPedido, entregarPedido } from '../services/business/pedidos.js';
+import { listarPreferencias, atualizarPreferencias } from '../services/notificacoes/preferencias.js';
 
 // Estados de entrega que disparam baixa definitiva no inventário
 const ESTADOS_SAIDA_ADMIN = ['ENTREGUE', 'ENVIADO', 'RETIRADA_NA_LOJA'];
@@ -569,6 +570,29 @@ export async function updateStatusPedido(req, res) {
     res.json({ success: true, numero: parseInt(numero), status_pagamento, status_entrega });
   } catch (err) {
     logger.error('Erro em updateStatusPedido:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+}
+
+/** GET /admin/api/notificacoes/preferencias */
+export async function getPreferenciasNotificacao(req, res) {
+  try {
+    res.json({ success: true, ...listarPreferencias() });
+  } catch (err) {
+    logger.error('Erro em getPreferenciasNotificacao:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+}
+
+/** PATCH /admin/api/notificacoes/preferencias/:whatsapp  body: {vendas,logistica,estoque,financeiro} */
+export async function setPreferenciaNotificacao(req, res) {
+  try {
+    const { whatsapp } = req.params;
+    const r = atualizarPreferencias(whatsapp, req.body || {});
+    if (!r.success) return res.status(400).json({ error: r.error });
+    res.json(r);
+  } catch (err) {
+    logger.error('Erro em setPreferenciaNotificacao:', err.message);
     res.status(500).json({ error: err.message });
   }
 }

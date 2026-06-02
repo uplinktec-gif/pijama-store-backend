@@ -409,6 +409,17 @@ function createTables() {
       ('Taxas e Impostos',      'DESPESA', '#b91c1c'),
       ('Assinaturas/Software',  'DESPESA', '#2563eb');
 
+    -- ─── Preferências de notificação por administrador ─────────────────────────
+    CREATE TABLE IF NOT EXISTS preferencias_notificacao (
+      whatsapp TEXT PRIMARY KEY,        -- número normalizado do admin
+      nome TEXT,
+      vendas INTEGER DEFAULT 1,         -- Novas Vendas/Pedidos (carrinho, PIX)
+      logistica INTEGER DEFAULT 1,      -- Logística/Baixas (despacho, baixa manual)
+      estoque INTEGER DEFAULT 1,        -- Estoque/Reposição (job 10h ABC, rupturas)
+      financeiro INTEGER DEFAULT 1,     -- Financeiro/Cobrança (job 21h inadimplência)
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
     CREATE INDEX IF NOT EXISTS idx_pedidos_whatsapp ON pedidos(cliente_whatsapp);
     CREATE INDEX IF NOT EXISTS idx_pedidos_status_pagamento ON pedidos(status_pagamento);
     CREATE INDEX IF NOT EXISTS idx_pedidos_status_entrega ON pedidos(status_entrega);

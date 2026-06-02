@@ -31,6 +31,10 @@ import {
   importar as importarFinanceiro,
   dashboard as dashboardFinanceiro
 } from '../controllers/financeiro.controller.js';
+import {
+  getPreferenciasNotificacao,
+  setPreferenciaNotificacao
+} from '../controllers/admin.controller.js';
 
 const router = Router();
 
@@ -76,6 +80,10 @@ router.get('/clientes/:id/pedidos', getClientePedidos);
 // LEADS  →  /admin/api/leads
 router.get('/leads', listLeads);
 router.patch('/leads/:id/status', updateLeadStatus);
+
+// NOTIFICAÇÕES  →  /admin/api/notificacoes
+router.get('/notificacoes/preferencias', getPreferenciasNotificacao);
+router.patch('/notificacoes/preferencias/:whatsapp', setPreferenciaNotificacao);
 
 // FINANCEIRO  →  /admin/api/financeiro
 router.get('/financeiro/categorias', getCategorias);

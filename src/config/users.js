@@ -106,6 +106,16 @@ function ehNumeroAutorizado(whatsappNumber) {
     env.authorizedNumbers.includes(whatsappNumber);
 }
 
+/**
+ * Lista os usuários conhecidos (admins/operadores) com número normalizado, nome e role.
+ * Usado pelo Centro de Preferências de Notificação.
+ */
+function listarUsuariosConhecidos() {
+  return Object.entries(USUARIOS_CONHECIDOS).map(([whatsapp, info]) => ({
+    whatsapp, nome: info.nome, role: info.role
+  }));
+}
+
 export {
   ROLES,
   PERMISSOES,
@@ -113,5 +123,6 @@ export {
   obterRoleUsuario,
   temPermissao,
   obterInfoUsuario,
-  ehNumeroAutorizado
+  ehNumeroAutorizado,
+  listarUsuariosConhecidos
 };
