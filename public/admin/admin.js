@@ -208,7 +208,8 @@ function showSection(section) {
     clientes: 'Clientes',
     leads: 'Leads',
     suporte: 'Suporte',
-    financeiro: 'Financeiro'
+    financeiro: 'Financeiro',
+    notificacoes: 'Notificações'
   };
   document.getElementById('sectionTitle').textContent = titles[section] || 'Dashboard';
 
@@ -227,6 +228,7 @@ function showSection(section) {
     case 'leads': loadLeads(); break;
     case 'suporte': loadSuporte(); break;
     case 'financeiro': loadFinanceiro(); break;
+    case 'notificacoes': loadNotificacoes(); break;
   }
 }
 
@@ -1078,6 +1080,41 @@ function debounce(fn, delay) {
 function logout() {
   localStorage.removeItem('adminToken');
   window.location.href = '/admin/login.html';
+}
+
+// ========================================
+// NOTIFICAÇÕES — Centro de Preferências
+// ========================================
+const NOTIF_CATS = ['vendas', 'logistica', 'estoque', 'financeiro'];
+
+async function loadNotificacoes() {
+  const data = await apiFetch('/notificacoes/preferencias');
+  if (!data) return;
+  const tbody = document.getElementById('notifTable').querySelector('tbody');
+  tbody.innerHTML = (data.usuarios || []).map(u => {
+    const toggles = NOTIF_CATS.map(cat => `
+      <td style="text-align:center;">
+        <label class="switch">
+          <input type="checkbox" ${u[cat] ? 'checked' : ''}
+                 onchange="toggleNotif('${u.whatsapp}','${cat}',this.checked)">
+          <span class="slider"></span>
+        </label>
+      </td>`).join('');
+    const tag = u.role === 'ADMIN' ? '<span class="badge badge-danger">ADMIN</span>' : '<span class="badge badge-info">OPERADOR</span>';
+    return `<tr><td><strong>${escapeHtml(u.nome)}</strong> ${tag}</td>${toggles}</tr>`;
+  }).join('');
+}
+
+async function toggleNotif(whatsapp, categoria, valor) {
+  const res = await apiFetch(`/notificacoes/preferencias/${whatsapp}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ [categoria]: valor })
+  });
+  if (res?.success) {
+    showToast(`✓ ${categoria} ${valor ? 'ativado' : 'desativado'}`, 'success');
+  } else {
+    loadNotificacoes(); // reverte visual se falhou
+  }
 }
 
 // ========================================

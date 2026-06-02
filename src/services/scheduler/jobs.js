@@ -5,6 +5,7 @@ import { gerarRelatorioDiario, analisarEstoque, analisarVendas } from '../busine
 import * as estoqueSheets from '../sqlite/estoque.js';
 import { listarInadimplentes } from '../sqlite/pedidos.js';
 import { gerarMensagemReposicao } from '../business/reposicao.js';
+import { notificarAdmins, podeNotificar } from '../notificacoes/preferencias.js';
 import { gerarRecomendacaoCliente } from '../business/recomendacoes.js';
 import * as clientesSheets from '../sqlite/clientes.js';
 import { realizarBackup } from '../backup/backupSQLite.js';
@@ -97,7 +98,7 @@ function agendarAlertasEstoque() {
         itensZerados.slice(0, 10).forEach(i => {
           mensagemZerados += `❌ *${i.modelo}*\n   Tamanho: ${i.tamanho}\n   Cor: ${i.cor}\n\n`;
         });
-        await senderService.enviarMensagem(NUMERO_FELIPE, mensagemZerados);
+        await notificarAdmins('estoque', mensagemZerados);
       }
 
       // Separar por tipo de alerta
@@ -123,8 +124,8 @@ function agendarAlertasEstoque() {
         });
       }
 
-      await senderService.enviarMensagem(NUMERO_FELIPE, mensagem);
-      logger.info('✓ Alertas de estoque enviados para Felipe');
+      await notificarAdmins('estoque', mensagem);
+      logger.info('✓ Alertas de estoque enviados (filtrado por preferência: estoque)');
     } catch (error) {
       logger.error('Erro ao enviar alerta de estoque:', error.message);
     }
@@ -350,9 +351,9 @@ async function gerarMensagemCobranca() {
 async function enviarCobrancaDiaria() {
   try {
     const msg = await gerarMensagemCobranca();
-    await senderService.enviarMensagem(NUMERO_FELIPE, msg);
-    await senderService.enviarMensagem(NUMERO_JULLY, msg);
-    logger.info('✓ Cobrança diária (21h) enviada para Felipe e Júlly');
+    // Respeita preferências: categoria 'financeiro'
+    await notificarAdmins('financeiro', msg);
+    logger.info('✓ Cobrança diária (21h) enviada (filtrada por preferência: financeiro)');
   } catch (error) {
     logger.error('Erro ao enviar cobrança diária:', error.message);
   }
@@ -371,9 +372,9 @@ function agendarCobrancaDiaria() {
 async function enviarReposicaoDiaria() {
   try {
     const msg = await gerarMensagemReposicao();
-    await senderService.enviarMensagem(NUMERO_FELIPE, msg);
-    await senderService.enviarMensagem(NUMERO_JULLY, msg);
-    logger.info('✓ Sugestão de reposição (10h) enviada para Felipe e Júlly');
+    // Respeita preferências: categoria 'estoque'
+    await notificarAdmins('estoque', msg);
+    logger.info('✓ Sugestão de reposição (10h) enviada (filtrada por preferência: estoque)');
   } catch (error) {
     logger.error('Erro ao enviar reposição diária:', error.message);
   }

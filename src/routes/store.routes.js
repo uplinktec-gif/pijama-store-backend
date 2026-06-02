@@ -6,6 +6,7 @@ import { logger } from '../utils/logger.js';
 import { enviarMensagem } from '../services/whatsapp/sender.js';
 import { env } from '../config/env.js';
 import { transaction, run, queryOne } from '../config/database.js';
+import { notificarAdmins } from '../services/notificacoes/preferencias.js';
 
 const router = express.Router();
 
@@ -272,9 +273,9 @@ ${itensFormatados}
 
 ⏳ Aguardando pagamento via PIX...`;
 
-      await enviarMensagem(env.numeroFelipe, msg);
-      await enviarMensagem(env.numeroJully, msg);
-      logger.info(`✓ Notificação pedido #${numFormatado} enviada`);
+      // Respeita preferências dos admins (categoria 'vendas')
+      await notificarAdmins('vendas', msg);
+      logger.info(`✓ Notificação pedido #${numFormatado} enviada (filtrada por preferência: vendas)`);
     } catch (erroWpp) {
       logger.error('Erro ao enviar notificação WhatsApp:', erroWpp.message);
     }
