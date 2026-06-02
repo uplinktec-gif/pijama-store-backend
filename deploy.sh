@@ -9,9 +9,12 @@ VPS_IP="177.7.47.211"
 VPS_USER="root"
 VPS_DIR="/opt/pijama-store"
 SSH_KEY="$HOME/.ssh/id_rsa"
-VPS_NODE='/root/.nvm/versions/node/v24.15.0/bin/node'
-VPS_NPM='/root/.nvm/versions/node/v24.15.0/bin/npm'
-VPS_NODE_DIR='/root/.nvm/versions/node/v24.15.0/bin'
+# Stack padronizado no Node 20 do SISTEMA (/usr/bin). É o que o daemon PM2
+# ressuscita após reboot (via systemd). Manter tudo aqui evita o mismatch de
+# ABI do better-sqlite3 (NODE_MODULE_VERSION) que derrubava site+bot.
+VPS_NODE='/usr/bin/node'
+VPS_NPM='/usr/bin/npm'
+VPS_NODE_DIR='/usr/bin'
 
 GREEN='\033[0;32m'
 RED='\033[0;31m'
@@ -79,19 +82,19 @@ if [ -f ".env" ]; then
     && ok ".env enviado" || echo "  (aviso: falha ao enviar .env, usando o existente)"
 fi
 
-# 8. Instala dependências na VPS (usa nvm)
+# 8. Instala dependências na VPS (Node 20 do sistema)
 info "Instalando dependências na VPS (pode levar ~30s)..."
 ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$VPS_USER@$VPS_IP" \
-  'export NVM_DIR="$HOME/.nvm" && [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" && cd '"$VPS_DIR"' && npm install --omit=dev --silent 2>&1 | tail -3' \
+  "cd $VPS_DIR && $VPS_NPM install --omit=dev --silent 2>&1 | tail -3" \
   || err "Falha no npm install"
 ok "Dependências instaladas"
 
-# 8.5 Recompila módulos nativos para a MESMA versão de Node que o PM2 usa.
+# 8.5 Recompila módulos nativos para a MESMA versão de Node que o PM2 usa (Node 20).
 # Evita crash "NODE_MODULE_VERSION mismatch" (better-sqlite3) quando o npm install
 # compila para uma ABI diferente da que o runtime (PM2 daemon) está rodando.
-info "Recompilando módulos nativos (better-sqlite3)..."
+info "Recompilando módulos nativos (better-sqlite3) para Node 20..."
 ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$VPS_USER@$VPS_IP" \
-  'export PATH="/root/.nvm/versions/node/v24.15.0/bin:$PATH" && cd '"$VPS_DIR"' && npm rebuild better-sqlite3 2>&1 | tail -2' \
+  "cd $VPS_DIR && $VPS_NPM rebuild better-sqlite3 2>&1 | tail -2" \
   || echo "  (aviso: rebuild falhou, verifique manualmente)"
 ok "Módulos nativos OK"
 
@@ -111,8 +114,6 @@ ok "Banco de dados verificado"
 VPS_PM2="$VPS_NODE_DIR/pm2"
 info "Reiniciando servidor na VPS via PM2..."
 ssh -i "$SSH_KEY" -o StrictHostKeyChecking=no "$VPS_USER@$VPS_IP" bash << SSHEOF
-  export NVM_DIR="\$HOME/.nvm"
-  [ -s "\$NVM_DIR/nvm.sh" ] && . "\$NVM_DIR/nvm.sh"
   PM2="$VPS_PM2"
   cd $VPS_DIR
 
