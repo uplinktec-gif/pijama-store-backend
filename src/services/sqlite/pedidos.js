@@ -12,8 +12,8 @@ export async function criarPedido(pedidoData) {
       `INSERT INTO pedidos
        (data_pedido, cliente_nome, cliente_whatsapp, descricao_pedido, quantidade_total,
         valor_total, tipo_entrega, endereco_entrega, status_pagamento, forma_pagamento,
-        status_entrega, itens_json, data_pagamento, data_entrega, observacoes)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        status_entrega, itens_json, data_pagamento, data_entrega, observacoes, criado_por)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         pedidoData.data_pedido || now,
         pedidoData.cliente_nome || '',
@@ -31,7 +31,8 @@ export async function criarPedido(pedidoData) {
           : JSON.stringify(pedidoData.itens_json || []),
         '', // data_pagamento vazio no início
         '', // data_entrega vazio no início
-        pedidoData.observacoes || ''
+        pedidoData.observacoes || '',
+        pedidoData.criado_por || 'Sistema'
       ]
     );
 
@@ -148,7 +149,8 @@ export async function listarTodosPendentes() {
   try {
     return query(
       `SELECT * FROM pedidos
-       WHERE status_entrega NOT IN ('ENTREGUE', 'RETIRADA_NA_LOJA')
+       WHERE status_entrega NOT IN ('ENTREGUE', 'RETIRADA_NA_LOJA', 'CANCELADO')
+         AND status_pagamento != 'CANCELADO'
        ORDER BY
          CASE WHEN status_pagamento = 'PAGO' THEN 0 ELSE 1 END,
          numero_pedido`
@@ -234,6 +236,7 @@ function mapPedido(row) {
     itens: itens,
     data_pagamento: row.data_pagamento || '',
     data_entrega: row.data_entrega || '',
-    observacoes: row.observacoes || ''
+    observacoes: row.observacoes || '',
+    criado_por: row.criado_por || ''
   };
 }

@@ -207,8 +207,8 @@ router.post('/checkout', async (req, res) => {
           `INSERT INTO pedidos
            (data_pedido, cliente_nome, cliente_whatsapp, descricao_pedido, quantidade_total,
             valor_total, tipo_entrega, endereco_entrega, status_pagamento, forma_pagamento,
-            status_entrega, itens_json, data_pagamento, data_entrega, observacoes)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PEDIDO', 'PIX', 'PENDENTE', ?, '', '', ?)`,
+            status_entrega, itens_json, data_pagamento, data_entrega, observacoes, criado_por)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PEDIDO', 'PIX', 'PENDENTE', ?, '', '', ?, 'Site')`,
           [
             now,
             cliente.nome,

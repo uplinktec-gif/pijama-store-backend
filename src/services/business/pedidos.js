@@ -7,6 +7,7 @@ import * as interpreterService from '../nlp/interpreter.js';
 import * as validatorService from '../nlp/validator.js';
 import { enviarMensagem } from '../whatsapp/sender.js';
 import { run } from '../../config/database.js';
+import { obterInfoUsuario } from '../../config/users.js';
 
 /**
  * Cancela um pedido com ESTORNO automático de estoque.
@@ -318,7 +319,9 @@ async function processarMensagemPedido(mensagem, clienteWhatsApp) {
       endereco_entrega: pedidoInterpretado.endereco_entrega || '',
       forma_pagamento: pedidoInterpretado.forma_pagamento || 'PENDENTE',
       itens_json: JSON.stringify(pedidoInterpretado.itens),
-      observacoes: pedidoInterpretado.observacoes || ''
+      observacoes: pedidoInterpretado.observacoes || '',
+      // Rastreabilidade: quem registrou a venda (quem digitou no bot)
+      criado_por: obterInfoUsuario(clienteWhatsApp)?.nome || 'Cliente'
     };
 
     logger.debug(`[PASSO 6] Dados do pedido:`, {
