@@ -21,6 +21,12 @@ const FAST_PATH_RULES = [
   // Saudações simples
   { regex: /^(oi|olá|ola|hey|bom dia|boa tarde|boa noite|eai|e aí|menu|ajuda|socorro|opa|oii|oeee?)$/i, action: 'saudacao' },
 
+  // ⭐ BAIXA DE ESTOQUE POR TEXTO — "baixa 1 zara m preto por defeito"
+  {
+    regex: /^(?:dar?\s+baixa(?:\s+em)?|baixa(?:r)?|tira(?:r)?|saiu|sa[ií]da\s+de)\s+\d*\s*\S+/i,
+    action: 'baixa_texto'
+  },
+
   // ⭐ CANCELAR PEDIDO — "cancelar pedido #16", "cancela o pedido 16"
   {
     regex: /cancela(?:r)?\s+(?:o\s+)?pedido\s+#?(\d+)/i,

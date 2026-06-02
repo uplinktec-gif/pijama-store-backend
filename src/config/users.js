@@ -59,8 +59,11 @@ const USUARIOS_CONHECIDOS = {
  * Se não for um usuário conhecido, assume CLIENTE
  */
 function obterRoleUsuario(whatsappNumber) {
-  if (USUARIOS_CONHECIDOS[whatsappNumber]) {
-    return USUARIOS_CONHECIDOS[whatsappNumber].role;
+  // Normaliza a entrada para casar com as chaves (robusto a 11/12/13 dígitos,
+  // independente do formato que a Evolution entregar no webhook)
+  const n = normalizarNumero(whatsappNumber);
+  if (USUARIOS_CONHECIDOS[n]) {
+    return USUARIOS_CONHECIDOS[n].role;
   }
   return ROLES.CLIENTE; // Padrão para desconhecidos
 }
@@ -84,12 +87,10 @@ function temPermissao(whatsappNumber, acao) {
  * Obtém informações do usuário
  */
 function obterInfoUsuario(whatsappNumber) {
-  const role = obterRoleUsuario(whatsappNumber);
-
-  if (USUARIOS_CONHECIDOS[whatsappNumber]) {
-    return USUARIOS_CONHECIDOS[whatsappNumber];
+  const n = normalizarNumero(whatsappNumber);
+  if (USUARIOS_CONHECIDOS[n]) {
+    return USUARIOS_CONHECIDOS[n];
   }
-
   return {
     nome: 'Cliente',
     role: ROLES.CLIENTE,

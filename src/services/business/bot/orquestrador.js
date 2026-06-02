@@ -20,6 +20,7 @@ import { detectarComandoAnalitics, processarAnalyticsVendas, processarAnalyticsE
 import { gerarResumoEstoque, gerarListaPlanaEstoque, formatarEstoqueWhatsApp, gerarSaudacao, formatarPedidosCliente, formatarEntregasPendentes, formatarPedidosAbertos } from './formatters.js';
 import { notificarClientePagamento, notificarClienteSaindo, notificarClienteEntrega } from './notificacoes.js';
 import { salvarHistorico } from './historico.js';
+import { iniciarBaixa, continuarBaixa } from './baixaTexto.js';
 
 /**
  * Processa mensagem com suporte a contexto multi-turno.
@@ -42,6 +43,15 @@ async function processarMensagemComContexto(mensagem, clienteWhatsApp) {
     // 1. Carregar contexto existente
     const contextoCarregado = await sheetConversas.carregarContexto(clienteWhatsApp);
     const contexto = contextoCarregado?.contexto || {};
+
+    // 📉 BAIXA POR TEXTO — continuação de fluxo pendente (escolha de motivo ou Sim/Não)
+    // Tem prioridade sobre tudo: "sim"/"não"/motivo são respostas, não comandos novos.
+    if (contexto.baixa_pendente) {
+      const r = await continuarBaixa(mensagem, clienteWhatsApp, contexto);
+      await sheetConversas.salvarContexto(clienteWhatsApp, r.contexto).catch(() => {});
+      logger.info(`[baixaTexto] continuação (${contexto.baixa_pendente.fase}) em ${Date.now() - inicio}ms`);
+      return { success: true, resposta: r.resposta, tipo: 'BAIXA_TEXTO' };
+    }
 
     // ⚡ FAST-PATH: Verificar se conseguimos responder sem Claude
     const fp = fastPath(mensagem, contexto);
@@ -79,6 +89,14 @@ async function processarMensagemComContexto(mensagem, clienteWhatsApp) {
           resposta: '📝 Claro! Me passa o cliente e os itens.\nEx: "1 Zara M preto pra Maria" ou "2 Anne P azul pra João"',
           tipo: 'INICIAR_PEDIDO'
         };
+      }
+
+      // ⭐ Baixa por texto — inicia fluxo (parse → motivo obrigatório → confirmação)
+      if (fp.action === 'baixa_texto') {
+        const r = await iniciarBaixa(mensagem, clienteWhatsApp, contexto);
+        if (r.contexto) await sheetConversas.salvarContexto(clienteWhatsApp, r.contexto).catch(() => {});
+        logger.info(`[FastPath] Baixa iniciada em ${Date.now() - inicio}ms`);
+        return { success: true, resposta: r.resposta, tipo: 'BAIXA_TEXTO' };
       }
 
       // ⭐ Cancelar pedido — estorno REAL (devolve estoque + grava log + marca CANCELADO)
