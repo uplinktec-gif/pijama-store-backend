@@ -40,11 +40,11 @@ const USUARIOS_CONHECIDOS = {
     role: ROLES.ADMIN,
     descricao: 'Dono - Acesso total'
   },
-  // Júlly (OPERADOR)
+  // Júlly (ADMIN — sócia, governança total)
   [NUMERO_JULLY]: {
     nome: 'Júlly',
-    role: ROLES.OPERADOR,
-    descricao: 'Operadora - Acesso a análises e estoque'
+    role: ROLES.ADMIN,
+    descricao: 'Sócia - Acesso total (pedidos, estoque, análises, backup)'
   },
   // Pluma (OPERADOR)
   [NUMERO_PLUMA]: {
