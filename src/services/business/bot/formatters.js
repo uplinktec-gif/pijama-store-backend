@@ -261,6 +261,16 @@ function formatarEntregasPendentes(pedidos) {
   return linhas.join('\n').trim();
 }
 
+// Formata a data de criação do pedido no fuso de Boa Vista (DD/MM HH:MM)
+function formatarDataHoraBV(iso) {
+  if (!iso) return '—';
+  const dt = new Date(iso);
+  if (isNaN(dt.getTime())) return '—';
+  const data = dt.toLocaleDateString('pt-BR', { timeZone: 'America/Boa_Vista', day: '2-digit', month: '2-digit' });
+  const hora = dt.toLocaleTimeString('pt-BR', { timeZone: 'America/Boa_Vista', hour: '2-digit', minute: '2-digit' });
+  return `${data} ${hora}`;
+}
+
 function formatarPedidosAbertos(pedidos) {
   if (pedidos.length === 0) {
     return `✅ Nenhum pedido em aberto! Tá tudo quitado e entregue.`;
@@ -276,9 +286,11 @@ function formatarPedidosAbertos(pedidos) {
 
     // Use emoji numbers or numeric index
     const numero = (i < emojis.length) ? emojis[i] : `${i + 1}.`;
+    const autor = p.criado_por || 'Sistema';
 
     linhas.push(
       `${numero} *Pedido #${String(p.numero_pedido).padStart(3, '0')}* — ${p.cliente_nome}`,
+      `   📅 ${formatarDataHoraBV(p.data_pedido)} | 👤 Autor: ${autor}`,
       `   ${p.descricao_pedido}`,
       `   💰 R$ ${Number(p.valor_total).toFixed(2)} | ${pago} | ${entregue}`,
       ''

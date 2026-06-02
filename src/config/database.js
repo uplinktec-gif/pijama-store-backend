@@ -462,6 +462,9 @@ function runMigrations() {
   safe('ALTER TABLE clientes ADD COLUMN otp_atual TEXT');
   safe('ALTER TABLE clientes ADD COLUMN otp_expira_em TEXT');
 
+  // v3 — rastreabilidade: quem registrou o pedido (Felipe/Júlly/Pluma/Site)
+  safe('ALTER TABLE pedidos ADD COLUMN criado_por TEXT');
+
   // v2 — Remove categorias do seed provisório antigo que não estão no plano
   // oficial, APENAS se não houver transação vinculada (preserva dados reais).
   try {
