@@ -274,6 +274,75 @@ export async function baixarEstoque(sku, quantidade, motivo, observacao = '', us
 }
 
 /**
+ * AJUSTE DE INVENTÁRIO (Auditoria) — override absoluto do saldo físico.
+ *
+ * O número contado vira a NOVA verdade do quantidade_total. O Delta
+ * (físico − sistema) é calculado e gravado no log_estoque em background,
+ * com sinal: negativo = quebra/perda, positivo = sobra encontrada — insumo
+ * direto para o custo de quebra de estoque no DRE.
+ *
+ * Override direto, mas NÃO toca a reserva (vendas em aberto seguem válidas).
+ * Se a contagem física for MENOR que o reservado, aplica mesmo assim (verdade
+ * é verdade) mas devolve `alertaReserva: true` para a UI sinalizar o conflito.
+ */
+export async function ajustarInventario(sku, contagemFisica, usuario = 'admin', observacao = '') {
+  try {
+    const fisico = parseInt(contagemFisica, 10);
+    if (!sku) return { success: false, error: 'SKU é obrigatório' };
+    if (!Number.isInteger(fisico) || fisico < 0) {
+      return { success: false, error: 'Contagem física deve ser um inteiro >= 0' };
+    }
+
+    const item = await findBySKU(sku);
+    if (!item) return { success: false, error: `SKU ${sku} não encontrado` };
+
+    const delta = fisico - item.quantidade_total;
+    if (delta === 0) {
+      return { success: true, delta: 0, novoTotal: fisico, semMudanca: true, alertaReserva: false };
+    }
+
+    const now = new Date().toISOString();
+    let logId = null;
+
+    transaction(() => {
+      // 1) Override absoluto do total; disponível = total - reservada (>= 0)
+      run(
+        `UPDATE estoque
+         SET quantidade_total = ?,
+             quantidade_disponivel = MAX(0, ? - quantidade_reservada),
+             data_atualizacao = ?,
+             updated_at = ?
+         WHERE sku = ?`,
+        [fisico, fisico, now, now, sku]
+      );
+
+      // 2) Auditoria: Delta assinado (negativo = quebra, positivo = sobra)
+      const res = run(
+        `INSERT INTO log_estoque
+           (data_hora, sku, modelo, tamanho, cor, quantidade, motivo, observacao, usuario)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [now, sku, item.modelo, item.tamanho, item.cor, delta, 'Auditoria de Inventário',
+         (observacao || `Sistema ${item.quantidade_total} -> Fisico ${fisico}`).trim(), usuario]
+      );
+      logId = res.id;
+    });
+
+    logger.info(`[estoque] AJUSTE ${sku}: ${item.quantidade_total} -> ${fisico} (D ${delta > 0 ? '+' : ''}${delta}) | log #${logId}`);
+    return {
+      success: true,
+      delta,
+      novoTotal: fisico,
+      alertaReserva: fisico < item.quantidade_reservada,
+      reservada: item.quantidade_reservada,
+      log_id: logId
+    };
+  } catch (error) {
+    logger.error('[sqlite:estoque] ajustarInventario:', error.message);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
  * Lista o histórico de baixas (log_estoque) para o Relatório de Baixas.
  * Filtros opcionais: motivo, sku, data_inicio, data_fim (YYYY-MM-DD).
  */

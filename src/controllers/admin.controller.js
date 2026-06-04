@@ -8,7 +8,7 @@ import { listarPreferencias, atualizarPreferencias } from '../services/notificac
 const ESTADOS_SAIDA_ADMIN = ['ENTREGUE', 'ENVIADO', 'RETIRADA_NA_LOJA'];
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import { baixarEstoque, listarLogEstoque, MOTIVOS_BAIXA } from '../services/sqlite/estoque.js';
+import { baixarEstoque, listarLogEstoque, MOTIVOS_BAIXA, liberarEstoque, generateSKU } from '../services/sqlite/estoque.js';
 
 const JWT_SECRET = () => process.env.JWT_SECRET || 'pluma-jwt-secret-2025';
 
@@ -430,6 +430,30 @@ export async function baixaEstoque(req, res) {
 }
 
 /**
+ * POST /admin/api/estoque/:sku/inventario
+ * Ajuste de Inventário (Auditoria) — override absoluto do saldo físico.
+ * Body: { contagem, observacao? }. Grava o Delta assinado no log_estoque.
+ */
+export async function ajusteInventario(req, res) {
+  try {
+    const { sku } = req.params;
+    const { contagem, observacao } = req.body;
+    if (contagem == null) {
+      return res.status(400).json({ error: 'contagem (saldo físico) é obrigatória' });
+    }
+    const usuario = req.adminUser?.username || 'admin';
+    const resultado = await ajustarInventario(sku, contagem, usuario, observacao);
+    if (!resultado.success) {
+      return res.status(400).json({ error: resultado.error });
+    }
+    res.json({ success: true, ...resultado });
+  } catch (err) {
+    logger.error('Erro em ajusteInventario:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+}
+
+/**
  * GET /admin/api/estoque/baixas
  * Relatório de Baixas — histórico do log_estoque (filtros opcionais por query).
  * Também devolve a lista de motivos válidos (fonte única da verdade p/ o front).
@@ -528,10 +552,35 @@ export async function updateEndereco(req, res) {
 export async function deletePedido(req, res) {
   try {
     const { numero } = req.params;
-    const pedido = queryOne('SELECT numero_pedido FROM pedidos WHERE numero_pedido = ?', [numero]);
+    const pedido = queryOne('SELECT * FROM pedidos WHERE numero_pedido = ?', [numero]);
     if (!pedido) return res.status(404).json({ error: 'Pedido não encontrado' });
+
+    // GATILHO DE ESTORNO NA EXCLUSÃO: se o pedido ainda SEGURA reserva
+    // (não saiu nem foi cancelado), devolve ao estoque antes de apagar.
+    // Sem isso, deletar um pedido pendente deixava reserva órfã para sempre.
+    const ent = (pedido.status_entrega || '').toUpperCase();
+    const pag = (pedido.status_pagamento || '').toUpperCase();
+    const aindaSeguraReserva = !['ENTREGUE', 'ENVIADO', 'RETIRADA_NA_LOJA', 'CANCELADO'].includes(ent) && pag !== 'CANCELADO';
+    if (aindaSeguraReserva) {
+      let itens = [];
+      try { itens = JSON.parse(pedido.itens_json || '[]'); } catch { itens = []; }
+      const now = new Date().toISOString();
+      const usuario = req.adminUser?.username || 'admin';
+      for (const it of itens) {
+        const { modelo, tamanho, cor } = it;
+        const qtd = Number(it.quantidade) || 1;
+        if (!modelo || !tamanho || !cor) continue;
+        await liberarEstoque(modelo, tamanho, cor, qtd);
+        try {
+          run(`INSERT INTO log_estoque (data_hora, sku, modelo, tamanho, cor, quantidade, motivo, observacao, usuario)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [now, generateSKU(modelo, tamanho, cor), modelo, tamanho, cor, qtd, 'Estorno por Exclusão de Pedido', `Pedido #${numero} excluído`, usuario]);
+        } catch (e) { logger.warn('[deletePedido] log_estoque falhou (reserva já liberada):', e.message); }
+      }
+    }
+
     run('DELETE FROM pedidos WHERE numero_pedido = ?', [numero]);
-    logger.info(`[admin] Pedido #${numero} excluído`);
+    logger.info(`[admin] Pedido #${numero} excluído${aindaSeguraReserva ? ' (reserva estornada ao estoque)' : ''}`);
     res.json({ success: true, mensagem: `Pedido #${numero} excluído com sucesso` });
   } catch (err) {
     logger.error('Erro em deletePedido:', err.message);

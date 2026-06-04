@@ -944,3 +944,8 @@ tr.row-furo td:first-child {
     width: 50%;
   }
 }
+
+/* Ajuste de Inventário — linha já contada/salva */
+.inv-salvo { background: #f0fdf4 !important; }
+.inv-salvo td { transition: background .3s; }
+#invTable kbd, .section kbd { background:#eee; border:1px solid #ccc; border-radius:4px; padding:1px 5px; font-size:12px; }
