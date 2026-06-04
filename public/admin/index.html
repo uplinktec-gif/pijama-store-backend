@@ -29,6 +29,10 @@
           <span class="icon">📦</span>
           <span class="label">Estoque</span>
         </a>
+        <a href="#inventario" class="nav-link" data-section="inventario">
+          <span class="icon">🧮</span>
+          <span class="label">Ajuste de Inventário</span>
+        </a>
         <a href="#baixas" class="nav-link" data-section="baixas">
           <span class="icon">📉</span>
           <span class="label">Relatório de Baixas</span>
@@ -348,6 +352,34 @@
                 <th title="Despacho e baixas manuais">🚚 Logística/Baixas</th>
                 <th title="Job 10h Curva ABC e rupturas">📦 Estoque/Reposição</th>
                 <th title="Job 21h Inadimplência">💰 Financeiro/Cobrança</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Ajuste de Inventário Section -->
+      <section id="inventario-section" class="section">
+        <p style="color:#666; margin-bottom:14px;">
+          🧮 <strong>Auditoria de estoque.</strong> Digite a contagem física ao lado do saldo do sistema e tecle
+          <kbd>Enter</kbd> (ou clique em Salvar). O número vira a verdade absoluta na hora; o sistema grava o
+          Δ (diferença) no log para análise de quebra no DRE.
+        </p>
+        <div style="display:flex; gap:10px; align-items:center; margin-bottom:14px; flex-wrap:wrap;">
+          <input id="invBusca" type="text" placeholder="🔎 Filtrar por modelo/cor…" oninput="renderInventario()" style="padding:8px 12px; border:1px solid #ddd; border-radius:8px; min-width:220px;">
+          <label style="font-size:14px; color:#555;"><input type="checkbox" id="invSoDiverg" onchange="renderInventario()"> só divergências (Δ ≠ 0)</label>
+          <span id="invResumo" style="margin-left:auto; font-size:14px; color:#666;"></span>
+        </div>
+        <div class="table-responsive">
+          <table id="invTable" class="data-table">
+            <thead>
+              <tr>
+                <th>Produto</th>
+                <th style="text-align:center;">Sistema</th>
+                <th style="text-align:center;">Contagem física</th>
+                <th style="text-align:center;">Δ</th>
+                <th style="text-align:center;">Ação</th>
               </tr>
             </thead>
             <tbody></tbody>

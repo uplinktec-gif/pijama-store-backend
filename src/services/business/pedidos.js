@@ -488,10 +488,16 @@ async function processarStatusUpdate(mensagem, clienteWhatsApp) {
     }
     // TIPO 2: Entrega
     else if (interpretacao.tipo === 'entrega') {
-      const updateResult = await pedidosSheets.atualizarStatusEntrega(
-        interpretacao.numero_pedido,
-        interpretacao.novo_status_entrega
-      );
+      // Estados de SAÍDA (entregue/enviado/retirada) DEVEM passar pelo motor
+      // entregarPedido — que dá baixa definitiva E libera a reserva. Usar a
+      // função crua aqui deixava reserva órfã (causa-raiz dos furos de estoque).
+      const novoStatusEntrega = (interpretacao.novo_status_entrega || '').toUpperCase();
+      const updateResult = ESTADOS_SAIDA.includes(novoStatusEntrega)
+        ? await entregarPedido(interpretacao.numero_pedido, novoStatusEntrega)
+        : await pedidosSheets.atualizarStatusEntrega(
+            interpretacao.numero_pedido,
+            interpretacao.novo_status_entrega
+          );
 
       if (updateResult.success) {
         resultado.success = true;

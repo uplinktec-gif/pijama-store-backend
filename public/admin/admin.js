@@ -222,6 +222,7 @@ function showSection(section) {
   currentSection = section;
   switch(section) {
     case 'estoque': loadEstoque(); break;
+    case 'inventario': loadInventario(); break;
     case 'baixas': loadBaixas(); break;
     case 'pedidos': loadPedidos(); break;
     case 'clientes': loadClientes(); break;
@@ -536,6 +537,104 @@ async function loadEstoque() {
         : `⚠️ Mostrando apenas estoque crítico (${total} item${total !== 1 ? 's' : ''})`;
     }
   }
+}
+
+// ========================================
+// AJUSTE DE INVENTÁRIO (Auditoria)
+// ========================================
+let invItens = [];
+
+async function loadInventario() {
+  const data = await apiFetch('/estoque');
+  if (!data) return;
+  const arr = Array.isArray(data) ? data : (data.estoque || []);
+  // Só SKUs reais cadastrados (furo de grade virtual não tem saldo a auditar)
+  invItens = arr.filter(i => !i.virtual).map(i => ({
+    sku: i.sku, modelo: i.modelo, tamanho: i.tamanho, cor: i.cor,
+    sistema: i.quantidade_total, reservada: i.quantidade_reservada || 0,
+    ultimoDelta: null, salvo: false
+  }));
+  renderInventario();
+}
+
+function renderInventario() {
+  const busca = (document.getElementById('invBusca')?.value || '').toLowerCase();
+  const soDiverg = document.getElementById('invSoDiverg')?.checked;
+  const tbody = document.getElementById('invTable').querySelector('tbody');
+
+  const visiveis = invItens
+    .map((it, idx) => ({ it, idx }))
+    .filter(({ it }) => {
+      const txt = `${it.modelo} ${it.tamanho} ${it.cor}`.toLowerCase();
+      if (busca && !txt.includes(busca)) return false;
+      if (soDiverg && (it.ultimoDelta === null || it.ultimoDelta === 0)) return false;
+      return true;
+    });
+
+  tbody.innerHTML = visiveis.map(({ it, idx }) => `
+    <tr id="invRow-${idx}" class="${it.salvo ? 'inv-salvo' : ''}">
+      <td><strong>${it.modelo}</strong> ${it.tamanho} <span style="color:#888">${it.cor}</span></td>
+      <td style="text-align:center;"><span id="invSis-${idx}" class="badge badge-info">${it.sistema}</span></td>
+      <td style="text-align:center;">
+        <input type="number" min="0" inputmode="numeric" id="invInput-${idx}" value="${it.fisico ?? ''}"
+          style="width:90px; padding:6px; text-align:center; border:1px solid #ccc; border-radius:6px;"
+          oninput="invCalcDelta(${idx})" onkeydown="if(event.key==='Enter'){event.preventDefault();invSalvar(${idx});}">
+      </td>
+      <td style="text-align:center;"><span id="invDelta-${idx}" style="font-weight:700;">${it.ultimoDelta === null ? '—' : (it.ultimoDelta > 0 ? '+' : '') + it.ultimoDelta}</span></td>
+      <td style="text-align:center;"><button class="btn btn-primary btn-small" onclick="invSalvar(${idx})">Salvar</button></td>
+    </tr>
+  `).join('');
+
+  const contados = invItens.filter(i => i.salvo).length;
+  const diverg = invItens.filter(i => i.ultimoDelta && i.ultimoDelta !== 0).length;
+  const resumo = document.getElementById('invResumo');
+  if (resumo) resumo.textContent = `${invItens.length} SKUs · ${contados} contados · ${diverg} divergência(s)`;
+}
+
+function invCalcDelta(idx) {
+  const it = invItens[idx];
+  const el = document.getElementById(`invInput-${idx}`);
+  const dEl = document.getElementById(`invDelta-${idx}`);
+  if (!it || !el || !dEl) return;
+  if (el.value === '') { dEl.textContent = '—'; dEl.style.color = '#888'; return; }
+  const d = parseInt(el.value, 10) - it.sistema;
+  dEl.textContent = (d > 0 ? '+' : '') + d;
+  dEl.style.color = d === 0 ? '#16a34a' : (d > 0 ? '#2563eb' : '#dc2626');
+}
+
+async function invSalvar(idx) {
+  const it = invItens[idx];
+  const el = document.getElementById(`invInput-${idx}`);
+  if (!it || !el) return;
+  if (el.value === '') { showToast('Digite a contagem física primeiro', 'error'); el.focus(); return; }
+  const contagem = parseInt(el.value, 10);
+  if (!Number.isInteger(contagem) || contagem < 0) { showToast('Contagem inválida', 'error'); return; }
+
+  const r = await apiFetch(`/estoque/${encodeURIComponent(it.sku)}/inventario`, {
+    method: 'POST',
+    body: JSON.stringify({ contagem })
+  });
+  if (!r) return;
+
+  it.sistema = r.novoTotal;
+  it.fisico = contagem;
+  it.ultimoDelta = r.delta;
+  it.salvo = true;
+
+  const sisEl = document.getElementById(`invSis-${idx}`);
+  if (sisEl) sisEl.textContent = r.novoTotal;
+  const row = document.getElementById(`invRow-${idx}`);
+  if (row) { row.classList.add('inv-salvo'); }
+  invCalcDelta(idx);
+
+  if (r.semMudanca) showToast(`${it.modelo} ${it.tamanho} ${it.cor}: confere (Δ 0)`, 'success');
+  else showToast(`${it.modelo} ${it.tamanho} ${it.cor}: ${r.delta > 0 ? '+' : ''}${r.delta} ajustado`, 'success');
+  if (r.alertaReserva) showToast(`⚠️ ${it.modelo} ${it.tamanho} ${it.cor}: contagem (${contagem}) < reservado (${r.reservada}). Há venda em aberto sem peça!`, 'error');
+
+  const resumo = document.getElementById('invResumo');
+  const contados = invItens.filter(i => i.salvo).length;
+  const diverg = invItens.filter(i => i.ultimoDelta && i.ultimoDelta !== 0).length;
+  if (resumo) resumo.textContent = `${invItens.length} SKUs · ${contados} contados · ${diverg} divergência(s)`;
 }
 
 /**

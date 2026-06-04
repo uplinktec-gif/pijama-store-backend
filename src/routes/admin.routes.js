@@ -10,6 +10,7 @@ import {
   updateEstoqueQuantidade,
   updateEstoquePreco,
   baixaEstoque,
+  ajusteInventario,
   listBaixas,
   listPedidos,
   getPedidoDetail,
@@ -61,6 +62,8 @@ router.patch('/estoque/:sku/quantidade', updateEstoqueQuantidade);
 router.patch('/estoque/:sku/preco', updateEstoquePreco);
 // Baixa manual de estoque (motivo obrigatório + log de auditoria)
 router.post('/estoque/:sku/baixa', baixaEstoque);
+// Ajuste de Inventário / Auditoria (override absoluto + Delta no log)
+router.post('/estoque/:sku/inventario', ajusteInventario);
 
 // PEDIDOS  →  /admin/api/pedidos
 router.get('/pedidos', listPedidos);
