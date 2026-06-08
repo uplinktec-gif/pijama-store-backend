@@ -285,7 +285,7 @@ export async function baixarEstoque(sku, quantidade, motivo, observacao = '', us
  * Se a contagem física for MENOR que o reservado, aplica mesmo assim (verdade
  * é verdade) mas devolve `alertaReserva: true` para a UI sinalizar o conflito.
  */
-export async function ajustarInventario(sku, contagemFisica, usuario = 'admin', observacao = '') {
+export async function ajustarInventario(sku, contagemFisica, usuario = 'admin', observacao = '', motivo = 'Auditoria de Inventário') {
   try {
     const fisico = parseInt(contagemFisica, 10);
     if (!sku) return { success: false, error: 'SKU é obrigatório' };
@@ -321,7 +321,7 @@ export async function ajustarInventario(sku, contagemFisica, usuario = 'admin', 
         `INSERT INTO log_estoque
            (data_hora, sku, modelo, tamanho, cor, quantidade, motivo, observacao, usuario)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [now, sku, item.modelo, item.tamanho, item.cor, delta, 'Auditoria de Inventário',
+        [now, sku, item.modelo, item.tamanho, item.cor, delta, motivo,
          (observacao || `Sistema ${item.quantidade_total} -> Fisico ${fisico}`).trim(), usuario]
       );
       logId = res.id;

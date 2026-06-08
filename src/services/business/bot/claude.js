@@ -109,6 +109,11 @@ AÇÕES E QUANDO USAR:
    → Se só tiver intenção sem detalhes: resposta = "Claro! Qual o cliente e o que deseja pedir?" e dados vazios
    Quantidade padrão é 1 se não mencionada.
 
+   🚫 NÃO É VENDA — RETIRADA / CONSUMO INTERNO DOS SÓCIOS:
+   Se a mensagem for retirada/uso interno/consumo dos sócios (ex: "retirada 1 anne p bordô para jully",
+   "uso interno", "consumo interno", "tira pra loja"), NÃO crie pedido e NÃO cobre preço.
+   Use action "responder" com: "Para retirada interna (sem cobrança), digite: retirada [qtd] [modelo] [tamanho] [cor] para [nome]".
+
    ⚠️ REGRA CRÍTICA SOBRE CORES: Use EXATAMENTE a cor que o usuário digitou. NUNCA adicione complementos.
    Exemplos CORRETOS:
      usuário diz "azul"      → cor: "azul"         (NÃO "azul marinho", NÃO "azul jeans")

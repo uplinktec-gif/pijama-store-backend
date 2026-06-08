@@ -21,6 +21,20 @@ const FAST_PATH_RULES = [
   // Saudações simples
   { regex: /^(oi|olá|ola|hey|bom dia|boa tarde|boa noite|eai|e aí|menu|ajuda|socorro|opa|oii|oeee?)$/i, action: 'saudacao' },
 
+  // ⭐ DÚVIDA/FAQ sobre retirada ou baixa — NÃO inicia fluxo, só explica em linguagem natural
+  // "como faço uma retirada?", "como funciona a baixa?", "o que é retirada interna"
+  {
+    regex: /(?:como\s+(?:fa[çc]o|funciona|faz|fa[çc]er)|o\s+que\s+[eé]|pra\s+que\s+serve).*(retirad|baixa\s+(?:de\s+)?estoque|baixa\s+interna|consumo\s+interno)/i,
+    action: 'faq_retirada'
+  },
+
+  // ⭐ RETIRADA INTERNA (Bypass de faturamento) — consumo dos sócios
+  // "retirada 1 anne p bordô para jully" → deduz estoque, SEM pedido/preço/endereço
+  {
+    regex: /^(?:retirad[ao]|retirar)\s+\d*\s*\S+/i,
+    action: 'admin_retirada'
+  },
+
   // ⭐ BAIXA DE ESTOQUE POR TEXTO — "baixa 1 zara m preto por defeito"
   {
     regex: /^(?:dar?\s+baixa(?:\s+em)?|baixa(?:r)?|tira(?:r)?|saiu|sa[ií]da\s+de)\s+\d*\s*\S+/i,
@@ -119,12 +133,29 @@ function fastPath(mensagem, contexto) {
     }
   }
 
-  // Endereço: contexto aguardando endereço
-  if (contexto?.aguardando_endereco && msg.length > 5) {
+  // Endereço: contexto aguardando endereço.
+  // Captura qualquer resposta curta (ex: "casa", len 4) DESDE QUE não seja um
+  // comando. Antes o guard `length > 5` derrubava "casa" (amnésia) e depois
+  // capturava "pedido #25" como endereço (vazamento). Agora: len >= 2 + filtro.
+  if (contexto?.aguardando_endereco && msg.length >= 2 && !ehComando(msg)) {
     return { action: 'salvar_endereco', dados: { endereco: msg, numero_pedido: contexto.aguardando_endereco } };
   }
 
   return null;
 }
 
-export { FAST_PATH_RULES, fastPath };
+/**
+ * Detecta se a mensagem é um COMANDO (não um endereço). Evita que, durante o
+ * estado `aguardando_endereco`, comandos como "pedido #25", "@estoque",
+ * "retirada ...", saudações etc. sejam salvos como endereço por engano.
+ */
+function ehComando(mensagem) {
+  const t = (mensagem || '').trim().toLowerCase();
+  return /^@/.test(t)
+    || /\bpedidos?\b/.test(t)
+    || /^(oi|ola|olá|hey|menu|ajuda|opa|bom dia|boa tarde|boa noite)/.test(t)
+    || /^(retirad|retirar|baixa|baixar|tira|tirar|saiu|cancela|pag[oa]|paga|entregue|retirou|reposi|estoque|alerta)/.test(t)
+    || /^\d+\s+\S+\s+(p|m|g|gg)\b/i.test(t); // "1 anne p ..." → parece pedido/retirada
+}
+
+export { FAST_PATH_RULES, fastPath, ehComando };
