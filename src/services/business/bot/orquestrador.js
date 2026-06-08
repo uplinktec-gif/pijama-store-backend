@@ -13,7 +13,8 @@ import * as sheetsEstoque from '../../sqlite/estoque.js';
 import * as sheetsPedidos from '../../sqlite/pedidos.js';
 import { enviarMensagem } from '../../whatsapp/sender.js';
 import { env } from '../../../config/env.js';
-import { fastPath } from './fastpath.js';
+import { fastPath, ehComando } from './fastpath.js';
+import { processarRetiradaInterna } from './retiradaInterna.js';
 import { tentarProcessarLote } from './lote.js';
 import { processarComClaudeComRetry } from './claude.js';
 import { detectarComandoAnalitics, processarAnalyticsVendas, processarAnalyticsEstoque, processarAnalyticsRecomendacao, processarAtualizarEstoque, consultarEstoqueReal, processarPendentes } from './analytics.js';
@@ -97,6 +98,27 @@ async function processarMensagemComContexto(mensagem, clienteWhatsApp) {
         if (r.contexto) await sheetConversas.salvarContexto(clienteWhatsApp, r.contexto).catch(() => {});
         logger.info(`[FastPath] Baixa iniciada em ${Date.now() - inicio}ms`);
         return { success: true, resposta: r.resposta, tipo: 'BAIXA_TEXTO' };
+      }
+
+      // ⭐ RETIRADA INTERNA (bypass de faturamento) — consumo dos sócios.
+      // NÃO cria pedido, NÃO cobra, NÃO pede endereço. Deduz + log "Retirada Interna/Sócio".
+      if (fp.action === 'admin_retirada') {
+        const r = await processarRetiradaInterna(mensagem, clienteWhatsApp);
+        logger.info(`[FastPath] Retirada interna em ${Date.now() - inicio}ms`);
+        return { success: true, resposta: r.resposta, tipo: 'RETIRADA_INTERNA' };
+      }
+
+      // ⭐ FAQ sobre retirada/baixa — explica em linguagem natural, NÃO inicia fluxo
+      if (fp.action === 'faq_retirada') {
+        return {
+          success: true,
+          tipo: 'FAQ',
+          resposta: '📦 *Como funciona a retirada interna (sócios):*\n\n' +
+            'Digite: *retirada [qtd] [modelo] [tamanho] [cor] para [nome]*\n' +
+            'Ex: _"retirada 1 Anne P Bordô para Jully"_\n\n' +
+            'Isso deduz do estoque *sem gerar pedido nem cobrança* (consumo interno, custo R$ 0).\n\n' +
+            'Já a *baixa* (defeito, perda, permuta) use: _"baixa 1 Zara M Preto por defeito"_ — ela pede o motivo e confirmação.'
+        };
       }
 
       // ⭐ Cancelar pedido — estorno REAL (devolve estoque + grava log + marca CANCELADO)
@@ -328,7 +350,7 @@ async function processarMensagemComContexto(mensagem, clienteWhatsApp) {
     }
 
     // Captura de endereço (quando aguardando após criação de pedido de entrega)
-    if (contexto.aguardando_endereco && mensagem.length > 5) {
+    if (contexto.aguardando_endereco && mensagem.trim().length >= 2 && !ehComando(mensagem)) {
       const numPedido = contexto.aguardando_endereco;
       await sheetsPedidos.atualizarEnderecoEntrega(numPedido, mensagem).catch(() => {});
       await sheetConversas.salvarContexto(clienteWhatsApp, {
