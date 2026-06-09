@@ -35,6 +35,19 @@ const FAST_PATH_RULES = [
     action: 'admin_retirada'
   },
 
+  // ⭐ CONSULTA GENÉRICA DE PREÇO — "quanto custa 4 luna", "quanto fica 2 anne", "preço de 3 zara"
+  // NÃO valida estoque/cor/tamanho: pega preço base do modelo × quantidade.
+  {
+    regex: /\b(?:quanto\s+(?:custa|fica|sai|vale|[ée])|pre[çc]o\s+(?:de|d[oa])?)\b/i,
+    action: 'consulta_preco'
+  },
+
+  // ⭐ PAGAR TODOS (batch) — "todos pagos", "pagar todos", "paga tudo", "marca todos como pago"
+  {
+    regex: /\b(?:todos?\s+pagos?|pag(?:ar|a|os)?\s+(?:todos|tudo)|marca(?:r)?\s+(?:todos|tudo)\s+(?:como\s+)?pago?|tudo\s+pago)/i,
+    action: 'pagar_todos'
+  },
+
   // ⭐ BAIXA DE ESTOQUE POR TEXTO — "baixa 1 zara m preto por defeito"
   {
     regex: /^(?:dar?\s+baixa(?:\s+em)?|baixa(?:r)?|tira(?:r)?|saiu|sa[ií]da\s+de)\s+\d*\s*\S+/i,
@@ -154,7 +167,7 @@ function ehComando(mensagem) {
   return /^@/.test(t)
     || /\bpedidos?\b/.test(t)
     || /^(oi|ola|olá|hey|menu|ajuda|opa|bom dia|boa tarde|boa noite)/.test(t)
-    || /^(retirad|retirar|baixa|baixar|tira|tirar|saiu|cancela|pag[oa]|paga|entregue|retirou|reposi|estoque|alerta)/.test(t)
+    || /^(retirad|retirar|baixa|baixar|tira|tirar|saiu|cancela|pag[oa]|paga|entregue|retirou|reposi|estoque|alerta|quanto|pre[çc]o|todos)/.test(t)
     || /^\d+\s+\S+\s+(p|m|g|gg)\b/i.test(t); // "1 anne p ..." → parece pedido/retirada
 }
 

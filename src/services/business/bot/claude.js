@@ -114,6 +114,15 @@ AÇÕES E QUANDO USAR:
    "uso interno", "consumo interno", "tira pra loja"), NÃO crie pedido e NÃO cobre preço.
    Use action "responder" com: "Para retirada interna (sem cobrança), digite: retirada [qtd] [modelo] [tamanho] [cor] para [nome]".
 
+   🚫 NÃO É VENDA — CONSULTA DE PREÇO: "quanto custa/fica/vale 4 luna", "preço de 3 zara" → NÃO crie pedido,
+   NÃO valide cor/tamanho. Use action "responder" (o sistema calcula o preço base × quantidade).
+
+   🛒 CARRINHO (MESMO CLIENTE = UM PEDIDO): se a mensagem tiver VÁRIOS itens para o MESMO cliente,
+   agrupe TODOS em UM único criar_pedido, preenchendo dados.itens com o ARRAY completo.
+   Ex: "1 luna g chocolate pra Karine, 1 luna g bordo pra Karine" →
+   UM pedido, dados.nome_cliente="Karine", dados.itens=[{luna g chocolate}, {luna g bordo}].
+   Só crie pedidos separados se os CLIENTES forem diferentes.
+
    ⚠️ REGRA CRÍTICA SOBRE CORES: Use EXATAMENTE a cor que o usuário digitou. NUNCA adicione complementos.
    Exemplos CORRETOS:
      usuário diz "azul"      → cor: "azul"         (NÃO "azul marinho", NÃO "azul jeans")

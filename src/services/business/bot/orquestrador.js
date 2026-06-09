@@ -24,6 +24,37 @@ import { salvarHistorico } from './historico.js';
 import { iniciarBaixa, continuarBaixa } from './baixaTexto.js';
 
 /**
+ * Consulta genérica de preço: preço BASE do modelo × quantidade.
+ * Não valida estoque, cor nem tamanho. Retorna texto pronto ou null se não
+ * reconhecer o modelo (aí o fluxo segue para o Claude).
+ */
+function calcularConsultaPreco(mensagem) {
+  const norm = s => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  const msgNorm = norm(mensagem);
+  const qMatch = mensagem.match(/(\d+)/);
+  const qtd = qMatch ? Math.max(1, parseInt(qMatch[1])) : 1;
+
+  let modelo = null;
+  for (const mo of [...env.catalogoModelos].sort((a, b) => b.length - a.length)) {
+    if (msgNorm.includes(norm(mo))) { modelo = mo; break; }
+  }
+  if (!modelo) return null;
+
+  const precos = env.modeloPrecos || {};
+  let preco = precos[modelo];
+  if (preco == null) {
+    for (const [k, v] of Object.entries(precos)) { if (norm(k) === norm(modelo)) { preco = v; break; } }
+  }
+  if (preco == null) return null;
+
+  const fmt = v => Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const total = preco * qtd;
+  return qtd > 1
+    ? `💰 *${qtd}x ${modelo}*\nUnitário: R$ ${fmt(preco)}\n*Total: R$ ${fmt(total)}*`
+    : `💰 *${modelo}*: R$ ${fmt(preco)} a unidade`;
+}
+
+/**
  * Processa mensagem com suporte a contexto multi-turno.
  * Comandos @ específicos vão para analytics; tudo mais passa pelo Claude.
  */
@@ -37,6 +68,10 @@ async function processarMensagemComContexto(mensagem, clienteWhatsApp) {
     // como um pedido INDEPENDENTE (número próprio, cliente próprio).
     const loteResultado = await tentarProcessarLote(mensagem, clienteWhatsApp);
     if (loteResultado) {
+      // Guarda os IDs criados na sessão p/ "todos pagos" (batch update)
+      if (loteResultado.criados?.length) {
+        await sheetConversas.salvarContexto(clienteWhatsApp, { historico: [], ultimos_pedidos: loteResultado.criados }).catch(() => {});
+      }
       logger.info(`[lote] ${loteResultado.totalLinhas} linha(s) processada(s) em ${Date.now() - inicio}ms`);
       return loteResultado;
     }
@@ -106,6 +141,33 @@ async function processarMensagemComContexto(mensagem, clienteWhatsApp) {
         const r = await processarRetiradaInterna(mensagem, clienteWhatsApp);
         logger.info(`[FastPath] Retirada interna em ${Date.now() - inicio}ms`);
         return { success: true, resposta: r.resposta, tipo: 'RETIRADA_INTERNA' };
+      }
+
+      // ⭐ CONSULTA GENÉRICA DE PREÇO — preço base do modelo × qtd, SEM validar estoque/variante
+      if (fp.action === 'consulta_preco') {
+        const r = calcularConsultaPreco(mensagem);
+        if (r) {
+          logger.info(`[FastPath] Consulta preço em ${Date.now() - inicio}ms`);
+          return { success: true, resposta: r, tipo: 'CONSULTA_PRECO' };
+        }
+        // sem modelo reconhecido → deixa o Claude responder normalmente
+      }
+
+      // ⭐ PAGAR TODOS (batch) — marca como PAGO os últimos pedidos da sessão
+      if (fp.action === 'pagar_todos') {
+        const ids = contexto.ultimos_pedidos || [];
+        if (ids.length === 0) {
+          return { success: true, tipo: 'PAGAR_TODOS', resposta: '🤔 Não tenho pedidos recentes na memória desta conversa. Me diz os números (ex: "pago 33").' };
+        }
+        const okIds = [];
+        for (const num of ids) {
+          const r = await sheetsPedidos.atualizarStatusPagamento(num, 'PAGO', 'PENDENTE').catch(() => null);
+          if (r?.success) okIds.push(num);
+        }
+        await sheetConversas.salvarContexto(clienteWhatsApp, { ...contexto, ultimos_pedidos: [] }).catch(() => {});
+        logger.info(`[FastPath] Pagar todos (${okIds.length}/${ids.length}) em ${Date.now() - inicio}ms`);
+        const lista = okIds.map(n => `#${String(n).padStart(3, '0')}`).join(', ');
+        return { success: true, tipo: 'PAGAR_TODOS', resposta: `✅ ${okIds.length} pedido(s) marcado(s) como *PAGO*: ${lista}` };
       }
 
       // ⭐ FAQ sobre retirada/baixa — explica em linguagem natural, NÃO inicia fluxo
@@ -473,7 +535,7 @@ async function processarMensagemComContexto(mensagem, clienteWhatsApp) {
 
           if (resPedido.success !== false && resPedido.numero_pedido) {
             // Pedido criado — limpa contexto de pedido parcial
-            const novoCtx = { numero_pedido_atual: resPedido.numero_pedido, historico: [] };
+            const novoCtx = { numero_pedido_atual: resPedido.numero_pedido, historico: [], ultimos_pedidos: [resPedido.numero_pedido] };
             if (resPedido.aguardando_endereco) novoCtx.aguardando_endereco = resPedido.numero_pedido;
             sheetConversas.salvarContexto(clienteWhatsApp, novoCtx).catch(() => {});
           } else if (resPedido.pedido_parcial) {
