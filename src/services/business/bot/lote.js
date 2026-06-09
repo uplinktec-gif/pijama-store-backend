@@ -39,28 +39,49 @@ async function tentarProcessarLote(mensagem, clienteWhatsApp) {
     .map(l => l.trim())
     .filter(Boolean);
 
-  // Linhas que parecem pedido (têm "pra/para <nome>")
-  const linhasPedido = linhas.filter(l => REGEX_LINHA_PEDIDO.test(l));
-
-  // Só ativa o modo lote com 2+ pedidos — 1 linha segue o fluxo normal
-  if (linhasPedido.length < 2) return null;
-
-  // 🛒 CARRINHO: agrupa as linhas pelo MESMO cliente → UM pedido com vários itens.
-  // Antes cada linha virava um pedido isolado (#29, #30, #31, #32 p/ a mesma Karine).
-  // Agora "1 luna g chocolate pra Karine" + "1 luna g bordo pra Karine" = 1 pedido.
+  // 🛒 CARRINHO com 2 formatos:
+  //   (A) item com nome em cada linha:  "1 luna g chocolate pra Karine"
+  //   (B) CABEÇALHO uma vez + itens sem nome:
+  //         pedido pra Karine
+  //         1 luna g marrom
+  //         1 zara p preto
+  // Em ambos, itens do MESMO cliente viram UM pedido.
   const norm = s => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+  const temProduto = (l) => /^\s*\d/.test(l) || env.catalogoModelos.some(mo => norm(l).includes(norm(mo)));
   const grupos = new Map(); // chaveCliente → { cliente, itens: [textoItem...] }
-  for (const linha of linhasPedido) {
-    const m = linha.match(/^(.*?)\b(?:pra|para)\s+(.+?)\s*$/i);
-    if (!m) continue;
-    const itemTexto = m[1].trim();
-    const cliente = m[2].trim();
+  const addItem = (cliente, itemTexto) => {
     const chave = norm(cliente);
     if (!grupos.has(chave)) grupos.set(chave, { cliente, itens: [] });
     grupos.get(chave).itens.push(itemTexto);
+  };
+
+  let clienteAtual = null;
+  let totalItens = 0;
+  for (const linha of linhas) {
+    if (temProduto(linha)) {
+      // Tem "pra/para NOME" próprio? (e o NOME não é outro produto)
+      const mi = linha.match(/^(.*?)\b(?:pra|para)\s+(.+?)\s*$/i);
+      if (mi && !temProduto(mi[2])) {
+        clienteAtual = mi[2].trim();
+        addItem(clienteAtual, mi[1].trim());
+      } else if (clienteAtual) {
+        // item sem nome → herda o cliente do cabeçalho
+        addItem(clienteAtual, linha.trim());
+      } else {
+        continue; // item sem cliente conhecido → ignora (não dá pra atribuir)
+      }
+      totalItens++;
+    } else {
+      // Linha sem produto → pode ser cabeçalho "pedido pra NOME" / "cliente: NOME"
+      const mh = linha.match(/^(?:pedido\s+)?(?:pra|para|cliente)\s*:?\s*(.+?)\s*:?\s*$/i);
+      if (mh && mh[1] && !temProduto(mh[1])) clienteAtual = mh[1].trim();
+    }
   }
 
-  logger.info(`[lote] Lote: ${linhasPedido.length} linha(s) → ${grupos.size} pedido(s) (agrupado por cliente)`);
+  // Só ativa o modo lote com 2+ itens reconhecidos — senão segue fluxo normal
+  if (grupos.size === 0 || totalItens < 2) return null;
+
+  logger.info(`[lote] Lote: ${totalItens} item(ns) → ${grupos.size} pedido(s) (agrupado por cliente)`);
 
   const sucessos = [];
   const falhas = [];
@@ -100,7 +121,7 @@ async function tentarProcessarLote(mensagem, clienteWhatsApp) {
     success: sucessos.length > 0,
     resposta: partes.join('\n'),
     tipo: 'LOTE_PEDIDOS',
-    totalLinhas: linhasPedido.length,
+    totalLinhas: totalItens,
     criados: sucessos.map(s => s.numero)
   };
 }
