@@ -43,8 +43,8 @@ function agendarRelatoraioDiario() {
         mensagem += `\n`;
       }
 
-      // Alertas de estoque
-      if (relatorio.estoque?.alertas?.length > 0) {
+      // Alertas de estoque — respeita o toggle (gate dinâmico no disparo)
+      if (flagLigada('alerta_estoque_critico') && relatorio.estoque?.alertas?.length > 0) {
         mensagem += `⚠️ ALERTAS DE ESTOQUE:\n`;
         relatorio.estoque.alertas.slice(0, 3).forEach(a => {
           mensagem += `   [${a.tipo}] ${a.produto}: ${a.diasRestantes} dias\n`;
@@ -68,6 +68,15 @@ function agendarRelatoraioDiario() {
 function agendarAlertasEstoque() {
   const job = schedule.scheduleJob('0 14 * * *' /* 10h Boa Vista */, async () => {
     try {
+      // GATE DINÂMICO: consulta as flags AGORA (no disparo), não na init.
+      // Default OFF → silêncio total. Era AQUI que faltava o gate (bug 10h).
+      const ligadoCritico = flagLigada('alerta_estoque_critico');
+      const ligadoSemEstoque = flagLigada('aviso_sem_estoque');
+      if (!ligadoCritico && !ligadoSemEstoque) {
+        logger.info('[alertas-estoque 10h] toggles OFF — nada enviado');
+        return;
+      }
+
       logger.info('🚨 Iniciando verificação de estoque baixo');
 
       const estoque = await analisarEstoque();
@@ -84,12 +93,18 @@ function agendarAlertasEstoque() {
       const todosItens = await estoqueSheets.readAllEstoque();
       const itensZerados = todosItens.filter(i => i.quantidade_disponivel === 0 && (i.status || '').toLowerCase() === 'ativo');
 
-      if (itensZerados.length > 0) {
+      if (itensZerados.length > 0 && ligadoSemEstoque) {
         let mensagemZerados = `🚨 *SEM ESTOQUE!*\n\nOs seguintes itens estão zerados:\n\n`;
         itensZerados.slice(0, 10).forEach(i => {
           mensagemZerados += `❌ *${i.modelo}*\n   Tamanho: ${i.tamanho}\n   Cor: ${i.cor}\n\n`;
         });
         await notificarAdmins('estoque', mensagemZerados);
+      }
+
+      // Se só o "sem estoque" está ligado, não monta o bloco de alertas críticos
+      if (!ligadoCritico) {
+        logger.info('[alertas-estoque 10h] alerta_estoque_critico OFF — só zerados (se houver)');
+        return;
       }
 
       // Separar por tipo de alerta
