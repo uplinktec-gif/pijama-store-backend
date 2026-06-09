@@ -97,6 +97,12 @@ function interpretarPedidoFallback(mensagem, clienteWhatsApp) {
 
 async function interpretarPedido(mensagem, clienteWhatsApp, contextoAnterior = null) {
   try {
+    // Sinônimos informais → cor do catálogo, ANTES do Claude interpretar.
+    // O cliente fala "marrom"; o catálogo tem "Chocolate". Sem isso o Claude
+    // devolve cor:null (não reconhece a cor) e o pedido fica incompleto.
+    mensagem = (mensagem || '')
+      .replace(/\bmarrom\b/gi, 'chocolate')
+      .replace(/\bcaf[ée]\b/gi, 'chocolate');
 
     // Construir catálogo para o prompt
     const modelosList = env.catalogoModelos.join(', ');
@@ -170,16 +176,22 @@ Interprete o pedido e retorne JSON.`;
     // ── SANITIZAÇÃO IMEDIATA ──────────────────────────────────────────────────
     // Remove sufixos hallucinados ("azul marinho", "azul jeans", "azul com X")
     // ANTES de qualquer busca de SKU ou validação de estoque.
+    // Sinônimos informais → cor oficial do catálogo (o cliente fala "marrom",
+    // o catálogo tem "Chocolate"). Comparação sem acento/caixa.
+    const SINONIMOS_COR = { marrom: 'Chocolate', cafe: 'Chocolate', 'café': 'Chocolate' };
     const sanitizarCorInterpreter = (cor) => {
       if (!cor) return cor;
       // "Azul Jeans" é cor legítima do catálogo — NÃO remover "jeans".
       // Apenas alucinações comuns: "marinho", "escuro/claro", "com X".
-      return cor
+      let c = cor
         .replace(/[\s-]+marinho/ig, '')
         .replace(/[\s-]+escuro/ig, '')
         .replace(/[\s-]+claro/ig, '')
         .replace(/\s+com\s+\w+/ig, '')
         .trim();
+      const chave = c.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+      if (SINONIMOS_COR[chave]) c = SINONIMOS_COR[chave];
+      return c;
     };
     if (result.pedido?.itens && Array.isArray(result.pedido.itens)) {
       result.pedido.itens.forEach(item => {
