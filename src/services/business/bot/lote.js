@@ -45,24 +45,39 @@ async function tentarProcessarLote(mensagem, clienteWhatsApp) {
   // Só ativa o modo lote com 2+ pedidos — 1 linha segue o fluxo normal
   if (linhasPedido.length < 2) return null;
 
-  logger.info(`[lote] Detectado lote: ${linhasPedido.length} pedido(s) em ${linhas.length} linha(s)`);
+  // 🛒 CARRINHO: agrupa as linhas pelo MESMO cliente → UM pedido com vários itens.
+  // Antes cada linha virava um pedido isolado (#29, #30, #31, #32 p/ a mesma Karine).
+  // Agora "1 luna g chocolate pra Karine" + "1 luna g bordo pra Karine" = 1 pedido.
+  const norm = s => (s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+  const grupos = new Map(); // chaveCliente → { cliente, itens: [textoItem...] }
+  for (const linha of linhasPedido) {
+    const m = linha.match(/^(.*?)\b(?:pra|para)\s+(.+?)\s*$/i);
+    if (!m) continue;
+    const itemTexto = m[1].trim();
+    const cliente = m[2].trim();
+    const chave = norm(cliente);
+    if (!grupos.has(chave)) grupos.set(chave, { cliente, itens: [] });
+    grupos.get(chave).itens.push(itemTexto);
+  }
+
+  logger.info(`[lote] Lote: ${linhasPedido.length} linha(s) → ${grupos.size} pedido(s) (agrupado por cliente)`);
 
   const sucessos = [];
   const falhas = [];
 
-  // Processa CADA linha como um pedido independente (sequencial, evita corrida no estoque)
-  for (const linha of linhasPedido) {
+  // Um pedido por CLIENTE (itens concatenados com " e "), sequencial p/ evitar corrida no estoque
+  for (const { cliente, itens } of grupos.values()) {
+    const msgCombinada = `${itens.join(' e ')} pra ${cliente}`;
     try {
-      // Cada linha passa pelo interpretador de pedido isoladamente → número próprio
-      const res = await pedidosService.processarMensagemPedido(linha, clienteWhatsApp);
+      const res = await pedidosService.processarMensagemPedido(msgCombinada, clienteWhatsApp);
       if (res?.success !== false && res?.numero_pedido) {
-        sucessos.push({ numero: res.numero_pedido, linha, msg: res.mensagem_usuario });
+        sucessos.push({ numero: res.numero_pedido, linha: `${cliente} — ${itens.length} item(ns)`, msg: res.mensagem_usuario });
       } else {
-        falhas.push({ linha, motivo: res?.mensagem_usuario || res?.erro || 'não reconhecido' });
+        falhas.push({ linha: msgCombinada, motivo: res?.mensagem_usuario || res?.erro || 'não reconhecido' });
       }
     } catch (err) {
-      logger.error(`[lote] Erro na linha "${linha}": ${err.message}`);
-      falhas.push({ linha, motivo: 'erro ao processar' });
+      logger.error(`[lote] Erro no pedido de "${cliente}": ${err.message}`);
+      falhas.push({ linha: msgCombinada, motivo: 'erro ao processar' });
     }
   }
 

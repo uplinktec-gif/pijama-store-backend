@@ -553,26 +553,36 @@ async function verificarEstoqueCriticoAposVenda(itens) {
     return;
   }
 
+  // ANTI-SPAM: coleta TODOS os itens críticos e envia UM único alerta no final
+  // (antes era 1 mensagem por item → 4 itens viravam 4 blocos seguidos no WhatsApp).
+  const zerados = [];
+  const criticos = [];
   for (const item of itens) {
     try {
       const estoqueItem = await estoqueService.findByModeloTamanhoCor(item.modelo, item.tamanho, item.cor);
       if (!estoqueItem) continue;
-
       const disponivel = estoqueItem.quantidade_disponivel;
-
       if (disponivel === 0) {
-        const alerta = `🚨 *SEM ESTOQUE!*\n\n${item.modelo} ${item.tamanho} ${item.cor}: sem unidades restantes.\n\nHora de repor!`;
-        await enviarMensagem(numeroFelipe, alerta);
-        logger.warn(`[estoque-critico] Sem estoque: ${item.modelo} ${item.tamanho} ${item.cor}`);
+        zerados.push(`${item.modelo} ${item.tamanho} ${item.cor}`);
       } else if (disponivel <= 2) {
-        const alerta = `⚠️ *Estoque crítico!*\n\n${item.modelo} ${item.tamanho} ${item.cor}: apenas ${disponivel} unidade(s) restante(s).\n\nHora de repor!`;
-        await enviarMensagem(numeroFelipe, alerta);
-        logger.warn(`[estoque-critico] Crítico: ${item.modelo} ${item.tamanho} ${item.cor} = ${disponivel} unidades`);
+        criticos.push(`${item.modelo} ${item.tamanho} ${item.cor} (${disponivel} restante${disponivel > 1 ? 's' : ''})`);
       }
     } catch (error) {
       logger.warn(`[estoque-critico] Erro ao verificar item ${item.modelo}:`, error.message);
     }
   }
+
+  if (zerados.length === 0 && criticos.length === 0) return;
+
+  const linhas = ['⚠️ *Alerta de Reposição*\n'];
+  if (zerados.length > 0) linhas.push(`🚨 *Esgotados:* ${zerados.join(', ')}`);
+  if (criticos.length > 0) linhas.push(`📉 *Crítico:* ${criticos.join(', ')}`);
+  linhas.push('\nHora de repor!');
+
+  await enviarMensagem(numeroFelipe, linhas.join('\n')).catch(e =>
+    logger.warn('[estoque-critico] Falha ao enviar alerta agregado:', e.message)
+  );
+  logger.warn(`[estoque-critico] Alerta agregado: ${zerados.length} esgotado(s), ${criticos.length} crítico(s)`);
 }
 
 /**
