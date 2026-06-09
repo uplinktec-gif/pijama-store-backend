@@ -420,6 +420,15 @@ function createTables() {
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
 
+    -- Configurações de SISTEMA (feature flags globais de disparos automáticos).
+    -- Default OFF (0): o sistema NÃO dispara nada até o dono ligar no painel.
+    CREATE TABLE IF NOT EXISTS config_sistema (
+      chave TEXT PRIMARY KEY,
+      valor INTEGER DEFAULT 0,
+      descricao TEXT,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
     CREATE INDEX IF NOT EXISTS idx_pedidos_whatsapp ON pedidos(cliente_whatsapp);
     CREATE INDEX IF NOT EXISTS idx_pedidos_status_pagamento ON pedidos(status_pagamento);
     CREATE INDEX IF NOT EXISTS idx_pedidos_status_entrega ON pedidos(status_entrega);

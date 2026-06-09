@@ -3,6 +3,7 @@ import { logger } from '../utils/logger.js';
 import { env } from '../config/env.js';
 import { cancelarPedido, entregarPedido } from '../services/business/pedidos.js';
 import { listarPreferencias, atualizarPreferencias } from '../services/notificacoes/preferencias.js';
+import { listarFlags, definirFlag } from '../services/config/configSistema.js';
 
 // Estados de entrega que disparam baixa definitiva no inventário
 const ESTADOS_SAIDA_ADMIN = ['ENTREGUE', 'ENVIADO', 'RETIRADA_NA_LOJA'];
@@ -619,6 +620,29 @@ export async function updateStatusPedido(req, res) {
     res.json({ success: true, numero: parseInt(numero), status_pagamento, status_entrega });
   } catch (err) {
     logger.error('Erro em updateStatusPedido:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+}
+
+/** GET /admin/api/config-sistema — flags globais de disparos automáticos */
+export async function getConfigSistema(req, res) {
+  try {
+    res.json({ success: true, flags: listarFlags() });
+  } catch (err) {
+    logger.error('Erro em getConfigSistema:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+}
+
+/** PATCH /admin/api/config-sistema/:chave  body: { ligado: true|false } */
+export async function setConfigSistema(req, res) {
+  try {
+    const { chave } = req.params;
+    const r = definirFlag(chave, req.body?.ligado === true);
+    if (!r.success) return res.status(400).json({ error: r.error });
+    res.json({ success: true, chave, ligado: req.body?.ligado === true });
+  } catch (err) {
+    logger.error('Erro em setConfigSistema:', err.message);
     res.status(500).json({ error: err.message });
   }
 }

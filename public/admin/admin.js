@@ -1061,7 +1061,6 @@ async function loadLeads() {
           <option value="contatado" ${lead.status === 'contatado' ? 'selected' : ''}>Contatado</option>
           <option value="interessado" ${lead.status === 'interessado' ? 'selected' : ''}>Interessado</option>
           <option value="cliente" ${lead.status === 'cliente' ? 'selected' : ''}>Cliente</option>
-          <option value="vip" ${lead.status === 'vip' ? 'selected' : ''}>VIP</option>
         </select>
       </td>
       <td>R$ ${(lead.total_gasto || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
@@ -1187,6 +1186,7 @@ function logout() {
 const NOTIF_CATS = ['vendas', 'logistica', 'estoque', 'financeiro'];
 
 async function loadNotificacoes() {
+  loadConfigSistema(); // toggles globais de sistema (topo da seção)
   const data = await apiFetch('/notificacoes/preferencias');
   if (!data) return;
   const tbody = document.getElementById('notifTable').querySelector('tbody');
@@ -1213,6 +1213,35 @@ async function toggleNotif(whatsapp, categoria, valor) {
     showToast(`✓ ${categoria} ${valor ? 'ativado' : 'desativado'}`, 'success');
   } else {
     loadNotificacoes(); // reverte visual se falhou
+  }
+}
+
+// ── Configurações de SISTEMA (toggles globais de disparos automáticos) ──────
+async function loadConfigSistema() {
+  const cont = document.getElementById('configSistemaLista');
+  if (!cont) return;
+  const data = await apiFetch('/config-sistema');
+  if (!data?.flags) { cont.innerHTML = '<em style="color:#c00;">Falha ao carregar.</em>'; return; }
+  cont.innerHTML = data.flags.map(f => `
+    <div style="display:flex; align-items:center; justify-content:space-between; padding:10px 4px; border-bottom:1px solid #f2f2f2;">
+      <span style="font-size:14px;">${escapeHtml(f.descricao)}</span>
+      <label class="switch">
+        <input type="checkbox" ${f.ligado ? 'checked' : ''}
+               onchange="toggleConfigSistema('${f.chave}', this.checked)">
+        <span class="slider"></span>
+      </label>
+    </div>`).join('');
+}
+
+async function toggleConfigSistema(chave, ligado) {
+  const res = await apiFetch(`/config-sistema/${chave}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ ligado })
+  });
+  if (res?.success) {
+    showToast(`✓ ${ligado ? 'Ativado' : 'Desativado'}`, 'success');
+  } else {
+    loadConfigSistema();
   }
 }
 

@@ -8,6 +8,7 @@ import * as validatorService from '../nlp/validator.js';
 import { enviarMensagem } from '../whatsapp/sender.js';
 import { run } from '../../config/database.js';
 import { obterInfoUsuario } from '../../config/users.js';
+import { flagLigada } from '../config/configSistema.js';
 
 /**
  * Cancela um pedido com ESTORNO automático de estoque.
@@ -465,16 +466,8 @@ async function processarStatusUpdate(mensagem, clienteWhatsApp) {
             interpretacao.numero_pedido
           );
 
-          if (leadUpdate.success && leadUpdate.isVip) {
-            mensagem_usuario += '\n\n🎉 *Cliente VIP!* Você atingiu R$ 500+ em compras!';
-            logger.info(`[LEADS] Cliente ${pedido.cliente_whatsapp} promovido a VIP`);
-
-            // Notificar Felipe sobre novo VIP
-            enviarNotificacaoNovoVIP(pedido, interpretacao.numero_pedido).catch(e =>
-              logger.warn('[notif-vip] Erro ao notificar:', e.message)
-            );
-          } else if (leadUpdate.success && !leadUpdate.isVip && pedido.valor_total > 0) {
-            // Notificar Felipe sobre novo cliente que pagou
+          if (leadUpdate.success && pedido.valor_total > 0) {
+            // Notificar Felipe sobre cliente que pagou (módulo VIP removido)
             enviarNotificacaoNovoClientePagou(pedido, interpretacao.numero_pedido).catch(e =>
               logger.warn('[notif-cliente] Erro ao notificar:', e.message)
             );
@@ -553,6 +546,11 @@ async function verificarEstoqueCriticoAposVenda(itens) {
     return;
   }
 
+  // TOGGLES DE SISTEMA (default OFF): só dispara o que o dono ligou no painel.
+  const ligadoSemEstoque = flagLigada('aviso_sem_estoque');
+  const ligadoCritico = flagLigada('alerta_estoque_critico');
+  if (!ligadoSemEstoque && !ligadoCritico) return; // ambos OFF → silêncio total
+
   // ANTI-SPAM: coleta TODOS os itens críticos e envia UM único alerta no final
   // (antes era 1 mensagem por item → 4 itens viravam 4 blocos seguidos no WhatsApp).
   const zerados = [];
@@ -562,9 +560,9 @@ async function verificarEstoqueCriticoAposVenda(itens) {
       const estoqueItem = await estoqueService.findByModeloTamanhoCor(item.modelo, item.tamanho, item.cor);
       if (!estoqueItem) continue;
       const disponivel = estoqueItem.quantidade_disponivel;
-      if (disponivel === 0) {
+      if (disponivel === 0 && ligadoSemEstoque) {
         zerados.push(`${item.modelo} ${item.tamanho} ${item.cor}`);
-      } else if (disponivel <= 2) {
+      } else if (disponivel > 0 && disponivel <= 2 && ligadoCritico) {
         criticos.push(`${item.modelo} ${item.tamanho} ${item.cor} (${disponivel} restante${disponivel > 1 ? 's' : ''})`);
       }
     } catch (error) {
@@ -659,37 +657,6 @@ async function enviarNotificacaoNovoClientePagou(pedido, numeroPedido) {
     logger.info(`[notif-cliente] Notificação enviada para Felipe: ${numeroPedido}`);
   } catch (error) {
     logger.error('[notif-cliente] Erro ao enviar notificação:', error.message);
-  }
-}
-
-/**
- * Envia notificação para Felipe quando cliente é promovido a VIP
- */
-async function enviarNotificacaoNovoVIP(pedido, numeroPedido) {
-  const numeroFelipe = process.env.NUMERO_FELIPE;
-  if (!numeroFelipe) return;
-
-  const mensagem = `
-⭐ *NOVO CLIENTE VIP!*
-
-👤 ${pedido.cliente_nome}
-📱 ${pedido.cliente_whatsapp}
-
-🎯 Alcançou R$ 500+ em compras!
-
-📋 Pedido: #${numeroPedido}
-🛍️ Descrição: ${pedido.descricao_pedido || 'N/A'}
-💰 Valor: R$ ${(pedido.valor_total || 0).toFixed(2)}
-💳 Forma: ${pedido.forma_pagamento || 'N/A'}
-
-💡 Sugestão: Ofereça frete grátis ou desconto exclusivo!
-`.trim();
-
-  try {
-    await enviarMensagem(numeroFelipe, mensagem);
-    logger.info(`[notif-vip] Notificação enviada para Felipe: ${numeroPedido}`);
-  } catch (error) {
-    logger.error('[notif-vip] Erro ao enviar notificação:', error.message);
   }
 }
 

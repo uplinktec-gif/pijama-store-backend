@@ -244,7 +244,6 @@
             <option value="contatado">Contatado</option>
             <option value="interessado">Interessado</option>
             <option value="cliente">Cliente</option>
-            <option value="vip">VIP</option>
           </select>
         </div>
         <div class="table-responsive">
@@ -339,8 +338,17 @@
 
       <!-- Notificações Section -->
       <section id="notificacoes-section" class="section">
+        <!-- ⚙️ Disparos automáticos do SISTEMA (feature flags globais, default OFF) -->
+        <div style="background:#fff; border:1px solid #eee; border-radius:12px; padding:18px; margin-bottom:24px;">
+          <h3 style="margin:0 0 4px;">⚙️ Disparos Automáticos do Sistema</h3>
+          <p style="color:#666; margin:0 0 14px; font-size:14px;">
+            Controle global dos alertas proativos do bot. <strong>Tudo começa desligado</strong> — ligue só o que quiser receber.
+          </p>
+          <div id="configSistemaLista"><em style="color:#999;">Carregando…</em></div>
+        </div>
+
         <p style="color:#666; margin-bottom:18px;">
-          🔔 Centro de Preferências — ligue/desligue os alertas operacionais por administrador no WhatsApp.
+          🔔 Centro de Preferências — ligue/desligue os alertas operacionais <strong>por administrador</strong> no WhatsApp.
           Combate à fadiga de notificação.
         </p>
         <div class="table-responsive">

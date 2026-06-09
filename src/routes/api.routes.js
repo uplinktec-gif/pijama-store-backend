@@ -11,7 +11,6 @@ router.get('/estoque/relatorio', apiController.obterRelatorioEstoque);
 
 // Rotas de Clientes
 router.get('/clientes/:whatsapp', apiController.obterPerfilCliente);
-router.get('/clientes/vips', apiController.obterVIPs);
 router.get('/clientes/inativos', apiController.obterInativos);
 router.get('/clientes/relatorio', apiController.obterRelatorioClientes);
 
