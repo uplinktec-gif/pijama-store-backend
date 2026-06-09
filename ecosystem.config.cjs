@@ -5,7 +5,7 @@ module.exports = {
     cwd: '/opt/pijama-store',
     instances: 1,
     exec_mode: 'fork',
-    env: { NODE_ENV: 'production', PORT: 3000 },
+    env: { NODE_ENV: 'production', PORT: 5000 },
     restart_delay: 3000,
     max_restarts: 10,
     min_uptime: '5s',
