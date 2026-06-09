@@ -6,8 +6,7 @@ import * as estoqueSheets from '../sqlite/estoque.js';
 import { listarInadimplentes } from '../sqlite/pedidos.js';
 import { gerarMensagemReposicao } from '../business/reposicao.js';
 import { notificarAdmins, podeNotificar } from '../notificacoes/preferencias.js';
-import { gerarRecomendacaoCliente } from '../business/recomendacoes.js';
-import * as clientesSheets from '../sqlite/clientes.js';
+import { flagLigada } from '../config/configSistema.js';
 import { realizarBackup } from '../backup/backupSQLite.js';
 import { obterRoleUsuario, temPermissao } from '../../config/users.js';
 
@@ -51,14 +50,6 @@ function agendarRelatoraioDiario() {
           mensagem += `   [${a.tipo}] ${a.produto}: ${a.diasRestantes} dias\n`;
         });
         mensagem += `\n`;
-      }
-
-      // VIPs
-      if (relatorio.clientes?.vips?.length > 0) {
-        mensagem += `👑 TOP CLIENTES:\n`;
-        relatorio.clientes.vips.slice(0, 3).forEach(v => {
-          mensagem += `   • ${v.nome}: R$ ${v.totalGasto.toLocaleString('pt-BR')}\n`;
-        });
       }
 
       await senderService.enviarMensagem(NUMERO_FELIPE, mensagem);
@@ -128,52 +119,6 @@ function agendarAlertasEstoque() {
       logger.info('✓ Alertas de estoque enviados (filtrado por preferência: estoque)');
     } catch (error) {
       logger.error('Erro ao enviar alerta de estoque:', error.message);
-    }
-  });
-
-  return job;
-}
-
-/**
- * Agenda recomendações para VIPs às segundas-feiras às 9h
- */
-function agendarRecomendacoesVIPs() {
-  const job = schedule.scheduleJob('0 13 * * 1' /* 09h Boa Vista seg */, async () => {
-    try {
-      logger.info('👑 Iniciando recomendações para VIPs');
-
-      // Buscar clientes (para identificar VIPs)
-      const todosClientes = await clientesSheets.readAllClientes();
-
-      // Selecionar VIPs (maiores gastos)
-      const vips = todosClientes
-        .filter(c => c.total_gasto && parseFloat(c.total_gasto) > 0)
-        .sort((a, b) => parseFloat(b.total_gasto) - parseFloat(a.total_gasto))
-        .slice(0, 5);
-
-      logger.info(`Enviando recomendações para ${vips.length} VIPs`);
-
-      // Enviar recomendação personalizada para cada VIP
-      for (const vip of vips) {
-        try {
-          const recomendacao = await gerarRecomendacaoCliente(vip.whatsapp);
-
-          if (recomendacao.success) {
-            await senderService.enviarMensagem(vip.whatsapp, recomendacao.mensagem);
-            logger.info(`✓ Recomendação enviada para ${vip.nome}`);
-          }
-        } catch (error) {
-          logger.error(`Erro ao enviar recomendação para ${vip.nome}:`, error.message);
-        }
-      }
-
-      // Notificar Felipe que as recomendações foram enviadas
-      await senderService.enviarMensagem(
-        NUMERO_FELIPE,
-        `👑 Recomendações de segunda-feira enviadas para ${vips.length} VIPs!`
-      );
-    } catch (error) {
-      logger.error('Erro ao agendar recomendações de VIPs:', error.message);
     }
   });
 
@@ -371,10 +316,15 @@ function agendarCobrancaDiaria() {
  */
 async function enviarReposicaoDiaria() {
   try {
+    // TOGGLE DE SISTEMA (default OFF): só dispara se o dono ligou no painel
+    if (!flagLigada('relatorio_reposicao')) {
+      logger.info('[reposição] Toggle relatorio_reposicao OFF — não enviado');
+      return;
+    }
     const msg = await gerarMensagemReposicao();
-    // Respeita preferências: categoria 'estoque'
+    // Respeita também as preferências por admin: categoria 'estoque'
     await notificarAdmins('estoque', msg);
-    logger.info('✓ Sugestão de reposição (10h) enviada (filtrada por preferência: estoque)');
+    logger.info('✓ Sugestão de reposição (10h) enviada (toggle ON + preferência: estoque)');
   } catch (error) {
     logger.error('Erro ao enviar reposição diária:', error.message);
   }
@@ -419,15 +369,6 @@ function inicializarScheduler() {
         job: agendarAlertasEstoque()
       });
       jobsAgendados.add('alertas-estoque');
-    }
-
-    // Agendar recomendações para VIPs às seg 9h
-    if (!jobsAgendados.has('recomendacoes-vips')) {
-      jobs.push({
-        nome: 'Recomendações VIPs (Seg 09h)',
-        job: agendarRecomendacoesVIPs()
-      });
-      jobsAgendados.add('recomendacoes-vips');
     }
 
     // Agendar backup automático às 02h

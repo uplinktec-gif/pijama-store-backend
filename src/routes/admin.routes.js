@@ -34,7 +34,9 @@ import {
 } from '../controllers/financeiro.controller.js';
 import {
   getPreferenciasNotificacao,
-  setPreferenciaNotificacao
+  setPreferenciaNotificacao,
+  getConfigSistema,
+  setConfigSistema
 } from '../controllers/admin.controller.js';
 
 const router = Router();
@@ -87,6 +89,9 @@ router.patch('/leads/:id/status', updateLeadStatus);
 // NOTIFICAÇÕES  →  /admin/api/notificacoes
 router.get('/notificacoes/preferencias', getPreferenciasNotificacao);
 router.patch('/notificacoes/preferencias/:whatsapp', setPreferenciaNotificacao);
+// Configurações de sistema (toggles globais de disparos automáticos)
+router.get('/config-sistema', getConfigSistema);
+router.patch('/config-sistema/:chave', setConfigSistema);
 
 // FINANCEIRO  →  /admin/api/financeiro
 router.get('/financeiro/categorias', getCategorias);

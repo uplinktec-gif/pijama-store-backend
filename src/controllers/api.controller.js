@@ -79,18 +79,6 @@ async function obterPerfilCliente(req, res) {
   }
 }
 
-/**
- * GET /api/clientes/vips - Retorna clientes VIP
- */
-async function obterVIPs(req, res) {
-  try {
-    const resultado = await businessClientes.listarVIPs();
-    res.json(resultado);
-  } catch (error) {
-    logger.error('Erro ao obter VIPs:', error.message);
-    res.status(500).json({ success: false, error: error.message });
-  }
-}
 
 /**
  * GET /api/clientes/inativos - Retorna clientes inativos
@@ -289,7 +277,6 @@ export {
   obterPorModelo,
   obterRelatorioEstoque,
   obterPerfilCliente,
-  obterVIPs,
   obterInativos,
   obterRelatorioClientes,
   obterEntregasPendentes,
