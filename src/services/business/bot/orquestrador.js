@@ -67,6 +67,45 @@ function extrairLimiteHistorico(mensagem) {
 }
 
 /**
+ * Detecta filtro por DATA/PERÍODO no histórico. Retorna {desde:ISO, label} ou null.
+ * Reconhece: "a partir de/do dia 08/06", "desde 08/06", "últimos N dias",
+ * "última semana", "semana passada", "hoje", "ontem".
+ * O início do período é meia-noite no fuso de Boa Vista (UTC-4).
+ */
+function extrairFiltroData(mensagem) {
+  const t = (mensagem || '').toLowerCase();
+  const BV_OFFSET_MS = 4 * 3600 * 1000; // Boa Vista = UTC-4
+
+  // Meia-noite (BV) de "diasAtras" dias atrás, como ISO UTC.
+  const inicioDiaBV = (diasAtras) => {
+    const agoraBV = new Date(Date.now() - BV_OFFSET_MS);     // "agora" em relógio BV
+    agoraBV.setUTCHours(0, 0, 0, 0);                         // zera p/ meia-noite BV
+    const alvoBV = agoraBV.getTime() - diasAtras * 86400000;
+    return new Date(alvoBV + BV_OFFSET_MS).toISOString();    // volta p/ UTC real
+  };
+
+  // Data explícita: "08/06" ou "08/06/2026" (com gatilho de período/histórico)
+  const md = t.match(/(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?/);
+  if (md && /(a partir|partir|desde|hist[óo]rico|pedidos?|de\s+\d)/.test(t)) {
+    const dia = parseInt(md[1], 10), mes = parseInt(md[2], 10);
+    let ano = md[3] ? parseInt(md[3], 10) : new Date(Date.now() - BV_OFFSET_MS).getUTCFullYear();
+    if (ano < 100) ano += 2000;
+    if (dia >= 1 && dia <= 31 && mes >= 1 && mes <= 12) {
+      const ms = Date.UTC(ano, mes - 1, dia, 0, 0, 0) + BV_OFFSET_MS; // meia-noite BV
+      return { desde: new Date(ms).toISOString(), label: `desde ${String(dia).padStart(2, '0')}/${String(mes).padStart(2, '0')}` };
+    }
+  }
+  // "últimos N dias" / "N dias"
+  const nd = t.match(/[úu]ltim[oa]s?\s+(\d+)\s+dias?/) || t.match(/(\d+)\s+dias?/);
+  if (nd) { const n = parseInt(nd[1], 10); if (n >= 1 && n <= 365) return { desde: inicioDiaBV(n), label: `últimos ${n} dias` }; }
+  // "última semana" / "semana passada" / "essa/nesta semana"
+  if (/[úu]ltima\s+semana|semana\s+passada|essa\s+semana|nesta\s+semana|na\s+semana/.test(t)) return { desde: inicioDiaBV(7), label: 'última semana' };
+  if (/\bhoje\b/.test(t)) return { desde: inicioDiaBV(0), label: 'hoje' };
+  if (/\bontem\b/.test(t)) return { desde: inicioDiaBV(1), label: 'ontem' };
+  return null;
+}
+
+/**
  * Processa mensagem com suporte a contexto multi-turno.
  * Comandos @ específicos vão para analytics; tudo mais passa pelo Claude.
  */
@@ -188,10 +227,11 @@ async function processarMensagemComContexto(mensagem, clienteWhatsApp) {
           return { success: false, resposta: '❌ Sem permissão para ver o histórico de pedidos.', tipo: 'HISTORICO' };
         }
         const cancelados = /cancelad[oa]s?/i.test(mensagem);
-        const limite = extrairLimiteHistorico(mensagem);
-        const pedidos = await sheetsPedidos.listarHistoricoPedidos({ cancelados, limite });
-        const resposta = formatarHistoricoPedidos(pedidos, cancelados);
-        logger.info(`[FastPath] Histórico (${cancelados ? 'cancelados' : 'pagos'}, pediu ${limite}, veio ${pedidos.length}) em ${Date.now() - inicio}ms`);
+        const filtro = extrairFiltroData(mensagem);
+        const limite = filtro ? 50 : extrairLimiteHistorico(mensagem); // por data → traz tudo (teto 50)
+        const pedidos = await sheetsPedidos.listarHistoricoPedidos({ cancelados, limite, desde: filtro?.desde || null });
+        const resposta = formatarHistoricoPedidos(pedidos, cancelados, filtro?.label || null);
+        logger.info(`[FastPath] Histórico (${cancelados ? 'cancelados' : 'pagos'}, ${filtro ? filtro.label : 'limite ' + limite}, veio ${pedidos.length}) em ${Date.now() - inicio}ms`);
         return { success: true, resposta, tipo: 'HISTORICO' };
       }
 
@@ -701,9 +741,10 @@ async function processarMensagemComContexto(mensagem, clienteWhatsApp) {
           return { success: false, resposta: '❌ Sem permissão para ver o histórico de pedidos.', tipo: 'HISTORICO' };
         }
         const cancelados = /cancelad[oa]s?/i.test(mensagem);
-        const limite = extrairLimiteHistorico(mensagem);
-        const pedidos = await sheetsPedidos.listarHistoricoPedidos({ cancelados, limite });
-        return { success: true, resposta: formatarHistoricoPedidos(pedidos, cancelados), tipo: 'HISTORICO' };
+        const filtro = extrairFiltroData(mensagem);
+        const limite = filtro ? 50 : extrairLimiteHistorico(mensagem);
+        const pedidos = await sheetsPedidos.listarHistoricoPedidos({ cancelados, limite, desde: filtro?.desde || null });
+        return { success: true, resposta: formatarHistoricoPedidos(pedidos, cancelados, filtro?.label || null), tipo: 'HISTORICO' };
       }
 
       case 'listar_entregas_pendentes': {

@@ -166,14 +166,18 @@ export async function listarTodosPendentes() {
  * Padrão: últimos N pedidos PAGOS (sucesso). Se {cancelados:true}: últimos N
  * com status CANCELADO (em pagamento OU entrega). Ordena do mais recente.
  */
-export async function listarHistoricoPedidos({ cancelados = false, limite = 10 } = {}) {
+export async function listarHistoricoPedidos({ cancelados = false, limite = 10, desde = null } = {}) {
   try {
-    const where = cancelados
+    const cond = cancelados
       ? "(status_pagamento = 'CANCELADO' OR status_entrega = 'CANCELADO')"
       : "status_pagamento = 'PAGO'";
+    const params = [];
+    let where = cond;
+    if (desde) { where += ' AND data_pedido >= ?'; params.push(desde); }
+    params.push(limite);
     return query(
       `SELECT * FROM pedidos WHERE ${where} ORDER BY numero_pedido DESC LIMIT ?`,
-      [limite]
+      params
     ).map(mapPedido);
   } catch (error) {
     logger.error('[sqlite:pedidos] listarHistoricoPedidos:', error.message);

@@ -161,8 +161,10 @@ AÇÕES E QUANDO USAR:
 
 10. "consulta_historico" — resumo dos ÚLTIMOS pedidos (já pagos OU cancelados)
    Exemplos: "manda o resumo dos últimos pedidos", "histórico de pedidos",
-             "últimos 10 pedidos", "últimos cancelados", "pedidos cancelados"
-   → Default = pagos. Se mencionar "cancelado(s)" = cancelados. O sistema busca e formata.
+             "últimos 10 pedidos", "últimos cancelados", "pedidos cancelados",
+             "histórico a partir do dia 08/06", "últimos 3 dias", "última semana"
+   → Default = pagos. "cancelado(s)" = cancelados. Quantidade ("20 pedidos") ou
+     período ("3 dias", "desde 08/06", "última semana") são tratados pelo sistema.
    ATENÇÃO: diferente de "listar_pedidos_abertos" (que mostra pendentes/em aberto).
 
 9. "listar_entregas_pendentes" — quando perguntar o que falta entregar ou enviar
