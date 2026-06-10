@@ -307,7 +307,7 @@ function formatarPedidosAbertos(pedidos) {
  * Conciso: 1 linha por pedido (SEM itens) + totalizador financeiro.
  * Formato: [✅|❌] #ID — Cliente — R$ Valor
  */
-function formatarHistoricoPedidos(pedidos, cancelados) {
+function formatarHistoricoPedidos(pedidos, cancelados, periodoLabel = null) {
   const brl = v => Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   // Data curta DD/MM no fuso de Boa Vista (economiza espaço na tela)
   const dataCurta = (iso) => {
@@ -317,16 +317,19 @@ function formatarHistoricoPedidos(pedidos, cancelados) {
     return d.toLocaleDateString('pt-BR', { timeZone: 'America/Boa_Vista', day: '2-digit', month: '2-digit' });
   };
 
+  const sufixoPeriodo = periodoLabel ? ` (${periodoLabel})` : '';
   if (!pedidos || pedidos.length === 0) {
     return cancelados
-      ? '✅ Nenhum pedido cancelado no histórico recente.'
-      : 'ℹ️ Nenhum pedido pago no histórico recente.';
+      ? `✅ Nenhum pedido cancelado${sufixoPeriodo}.`
+      : `ℹ️ Nenhum pedido pago${sufixoPeriodo}.`;
   }
 
   const icone = cancelados ? '❌' : '✅';
-  const titulo = cancelados
-    ? `❌ *Últimos ${pedidos.length} pedidos CANCELADOS*`
-    : `✅ *Últimos ${pedidos.length} pedidos PAGOS*`;
+  const tipo = cancelados ? 'CANCELADOS' : 'PAGOS';
+  // Com período (data): "Pedidos PAGOS (desde 08/06)". Sem período: "Últimos N pedidos PAGOS".
+  const titulo = periodoLabel
+    ? `${icone} *Pedidos ${tipo} — ${periodoLabel}* (${pedidos.length})`
+    : `${icone} *Últimos ${pedidos.length} pedidos ${tipo}*`;
 
   const linhas = [titulo, ''];
   let total = 0;

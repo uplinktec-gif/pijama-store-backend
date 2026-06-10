@@ -87,7 +87,7 @@ const FAST_PATH_RULES = [
   // ⭐ CONSULTA DE HISTÓRICO (resumo executivo) — "resumo dos últimos pedidos",
   // "histórico de pedidos", "últimos cancelados". Default = pagos; "cancelad" = cancelados.
   {
-    regex: /(?:hist[óo]rico\s+(?:de\s+|dos?\s+)?pedidos?|resumo\s+(?:dos?\s+|de\s+)?[úu]ltimos?\s+pedidos?|[úu]ltimos?\s+(?:\d+\s+)?pedidos?\s*(?:pagos?|cancelad[oa]s?)?|[úu]ltimos?\s+cancelad[oa]s?|pedidos?\s+cancelad[oa]s?)/i,
+    regex: /(?:hist[óo]rico\b|resumo\s+(?:dos?\s+|de\s+)?[úu]ltimos?\s+pedidos?|[úu]ltimos?\s+(?:\d+\s+)?pedidos?\s*(?:pagos?|cancelad[oa]s?)?|[úu]ltimos?\s+cancelad[oa]s?|pedidos?\s+cancelad[oa]s?|[úu]ltim[oa]s?\s+\d+\s+dias?|[úu]ltima\s+semana|semana\s+passada|a\s+partir\s+d[oe]\s+(?:dia\s+)?\d|desde\s+(?:o\s+dia\s+)?\d)/i,
     action: 'consulta_historico'
   },
 
