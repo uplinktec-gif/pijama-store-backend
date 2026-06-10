@@ -309,6 +309,13 @@ function formatarPedidosAbertos(pedidos) {
  */
 function formatarHistoricoPedidos(pedidos, cancelados) {
   const brl = v => Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  // Data curta DD/MM no fuso de Boa Vista (economiza espaço na tela)
+  const dataCurta = (iso) => {
+    if (!iso) return '--/--';
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '--/--';
+    return d.toLocaleDateString('pt-BR', { timeZone: 'America/Boa_Vista', day: '2-digit', month: '2-digit' });
+  };
 
   if (!pedidos || pedidos.length === 0) {
     return cancelados
@@ -325,7 +332,7 @@ function formatarHistoricoPedidos(pedidos, cancelados) {
   let total = 0;
   for (const p of pedidos) {
     total += Number(p.valor_total) || 0;
-    linhas.push(`${icone} #${String(p.numero_pedido).padStart(3, '0')} — ${p.cliente_nome || 'Cliente'} — R$ ${brl(p.valor_total)}`);
+    linhas.push(`${icone} #${String(p.numero_pedido).padStart(3, '0')} (${dataCurta(p.data_pedido)}) — ${p.cliente_nome || 'Cliente'} — R$ ${brl(p.valor_total)}`);
   }
   linhas.push('');
   linhas.push(`💰 *Total do Lote: R$ ${brl(total)}*`);
