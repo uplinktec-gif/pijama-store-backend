@@ -55,6 +55,18 @@ function calcularConsultaPreco(mensagem) {
 }
 
 /**
+ * Extrai a quantidade pedida no histórico ("últimos 20 pedidos" → 20).
+ * Sem número → 10 (padrão). Teto de 50 para não estourar a tela do WhatsApp.
+ */
+function extrairLimiteHistorico(mensagem) {
+  const m = (mensagem || '').match(/\d+/);
+  if (!m) return 10;
+  const n = parseInt(m[0], 10);
+  if (!Number.isInteger(n) || n < 1) return 10;
+  return Math.min(n, 50);
+}
+
+/**
  * Processa mensagem com suporte a contexto multi-turno.
  * Comandos @ específicos vão para analytics; tudo mais passa pelo Claude.
  */
@@ -176,9 +188,10 @@ async function processarMensagemComContexto(mensagem, clienteWhatsApp) {
           return { success: false, resposta: '❌ Sem permissão para ver o histórico de pedidos.', tipo: 'HISTORICO' };
         }
         const cancelados = /cancelad[oa]s?/i.test(mensagem);
-        const pedidos = await sheetsPedidos.listarHistoricoPedidos({ cancelados, limite: 10 });
+        const limite = extrairLimiteHistorico(mensagem);
+        const pedidos = await sheetsPedidos.listarHistoricoPedidos({ cancelados, limite });
         const resposta = formatarHistoricoPedidos(pedidos, cancelados);
-        logger.info(`[FastPath] Histórico (${cancelados ? 'cancelados' : 'pagos'}, ${pedidos.length}) em ${Date.now() - inicio}ms`);
+        logger.info(`[FastPath] Histórico (${cancelados ? 'cancelados' : 'pagos'}, pediu ${limite}, veio ${pedidos.length}) em ${Date.now() - inicio}ms`);
         return { success: true, resposta, tipo: 'HISTORICO' };
       }
 
@@ -688,7 +701,8 @@ async function processarMensagemComContexto(mensagem, clienteWhatsApp) {
           return { success: false, resposta: '❌ Sem permissão para ver o histórico de pedidos.', tipo: 'HISTORICO' };
         }
         const cancelados = /cancelad[oa]s?/i.test(mensagem);
-        const pedidos = await sheetsPedidos.listarHistoricoPedidos({ cancelados, limite: 10 });
+        const limite = extrairLimiteHistorico(mensagem);
+        const pedidos = await sheetsPedidos.listarHistoricoPedidos({ cancelados, limite });
         return { success: true, resposta: formatarHistoricoPedidos(pedidos, cancelados), tipo: 'HISTORICO' };
       }
 
