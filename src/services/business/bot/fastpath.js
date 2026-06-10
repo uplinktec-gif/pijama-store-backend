@@ -84,6 +84,13 @@ const FAST_PATH_RULES = [
     action: 'iniciar_pedido'
   },
 
+  // ⭐ CONSULTA DE HISTÓRICO (resumo executivo) — "resumo dos últimos pedidos",
+  // "histórico de pedidos", "últimos cancelados". Default = pagos; "cancelad" = cancelados.
+  {
+    regex: /(?:hist[óo]rico\s+(?:de\s+|dos?\s+)?pedidos?|resumo\s+(?:dos?\s+|de\s+)?[úu]ltimos?\s+pedidos?|[úu]ltimos?\s+(?:\d+\s+)?pedidos?\s*(?:pagos?|cancelad[oa]s?)?|[úu]ltimos?\s+cancelad[oa]s?|pedidos?\s+cancelad[oa]s?)/i,
+    action: 'consulta_historico'
+  },
+
   // Listar pedidos abertos — só palavras isoladas, sem verbos de ação antes
   { regex: /^(@?pedidos?|@?pendentes?|abertos?)$/i, action: 'listar_pedidos_abertos' },
   // Analytics
@@ -167,7 +174,7 @@ function ehComando(mensagem) {
   return /^@/.test(t)
     || /\bpedidos?\b/.test(t)
     || /^(oi|ola|olá|hey|menu|ajuda|opa|bom dia|boa tarde|boa noite)/.test(t)
-    || /^(retirad|retirar|baixa|baixar|tira|tirar|saiu|cancela|pag[oa]|paga|entregue|retirou|reposi|estoque|alerta|quanto|pre[çc]o|todos)/.test(t)
+    || /^(retirad|retirar|baixa|baixar|tira|tirar|saiu|cancela|pag[oa]|paga|entregue|retirou|reposi|estoque|alerta|quanto|pre[çc]o|todos|hist[óo]rico|resumo|[úu]ltimos?)/.test(t)
     || /^\d+\s+\S+\s+(p|m|g|gg)\b/i.test(t); // "1 anne p ..." → parece pedido/retirada
 }
 

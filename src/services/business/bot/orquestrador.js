@@ -18,7 +18,7 @@ import { processarRetiradaInterna } from './retiradaInterna.js';
 import { tentarProcessarLote } from './lote.js';
 import { processarComClaudeComRetry } from './claude.js';
 import { detectarComandoAnalitics, processarAnalyticsVendas, processarAnalyticsEstoque, processarAnalyticsRecomendacao, processarAtualizarEstoque, consultarEstoqueReal, processarPendentes } from './analytics.js';
-import { gerarResumoEstoque, gerarListaPlanaEstoque, formatarEstoqueWhatsApp, gerarSaudacao, formatarPedidosCliente, formatarEntregasPendentes, formatarPedidosAbertos } from './formatters.js';
+import { gerarResumoEstoque, gerarListaPlanaEstoque, formatarEstoqueWhatsApp, gerarSaudacao, formatarPedidosCliente, formatarEntregasPendentes, formatarPedidosAbertos, formatarHistoricoPedidos } from './formatters.js';
 import { notificarClientePagamento, notificarClienteSaindo, notificarClienteEntrega } from './notificacoes.js';
 import { salvarHistorico } from './historico.js';
 import { iniciarBaixa, continuarBaixa } from './baixaTexto.js';
@@ -168,6 +168,18 @@ async function processarMensagemComContexto(mensagem, clienteWhatsApp) {
         logger.info(`[FastPath] Pagar todos (${okIds.length}/${ids.length}) em ${Date.now() - inicio}ms`);
         const lista = okIds.map(n => `#${String(n).padStart(3, '0')}`).join(', ');
         return { success: true, tipo: 'PAGAR_TODOS', resposta: `✅ ${okIds.length} pedido(s) marcado(s) como *PAGO*: ${lista}` };
+      }
+
+      // ⭐ CONSULTA DE HISTÓRICO (resumo executivo) — pagos (padrão) ou cancelados
+      if (fp.action === 'consulta_historico') {
+        if (!temPermissao(clienteWhatsApp, 'ANALYTICS_VENDAS')) {
+          return { success: false, resposta: '❌ Sem permissão para ver o histórico de pedidos.', tipo: 'HISTORICO' };
+        }
+        const cancelados = /cancelad[oa]s?/i.test(mensagem);
+        const pedidos = await sheetsPedidos.listarHistoricoPedidos({ cancelados, limite: 10 });
+        const resposta = formatarHistoricoPedidos(pedidos, cancelados);
+        logger.info(`[FastPath] Histórico (${cancelados ? 'cancelados' : 'pagos'}, ${pedidos.length}) em ${Date.now() - inicio}ms`);
+        return { success: true, resposta, tipo: 'HISTORICO' };
       }
 
       // ⭐ FAQ sobre retirada/baixa — explica em linguagem natural, NÃO inicia fluxo
@@ -669,6 +681,15 @@ async function processarMensagemComContexto(mensagem, clienteWhatsApp) {
           logger.error('[listar_pedidos_abertos] Erro:', err.message);
           return { success: false, resposta: 'Erro ao carregar pedidos em aberto. Tenta de novo?', tipo: 'LISTAR_PEDIDOS' };
         }
+      }
+
+      case 'consulta_historico': {
+        if (!temPermissao(clienteWhatsApp, 'ANALYTICS_VENDAS')) {
+          return { success: false, resposta: '❌ Sem permissão para ver o histórico de pedidos.', tipo: 'HISTORICO' };
+        }
+        const cancelados = /cancelad[oa]s?/i.test(mensagem);
+        const pedidos = await sheetsPedidos.listarHistoricoPedidos({ cancelados, limite: 10 });
+        return { success: true, resposta: formatarHistoricoPedidos(pedidos, cancelados), tipo: 'HISTORICO' };
       }
 
       case 'listar_entregas_pendentes': {

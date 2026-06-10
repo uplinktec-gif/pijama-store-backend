@@ -162,6 +162,26 @@ export async function listarTodosPendentes() {
 }
 
 /**
+ * Histórico para o resumo executivo no WhatsApp.
+ * Padrão: últimos N pedidos PAGOS (sucesso). Se {cancelados:true}: últimos N
+ * com status CANCELADO (em pagamento OU entrega). Ordena do mais recente.
+ */
+export async function listarHistoricoPedidos({ cancelados = false, limite = 10 } = {}) {
+  try {
+    const where = cancelados
+      ? "(status_pagamento = 'CANCELADO' OR status_entrega = 'CANCELADO')"
+      : "status_pagamento = 'PAGO'";
+    return query(
+      `SELECT * FROM pedidos WHERE ${where} ORDER BY numero_pedido DESC LIMIT ?`,
+      [limite]
+    ).map(mapPedido);
+  } catch (error) {
+    logger.error('[sqlite:pedidos] listarHistoricoPedidos:', error.message);
+    return [];
+  }
+}
+
+/**
  * Lista inadimplentes: TODOS os pedidos em aberto (não pagos), de qualquer data.
  * Exclui pagos e cancelados. Ordena do mais antigo (maior aging) para o mais novo.
  */

@@ -302,4 +302,34 @@ function formatarPedidosAbertos(pedidos) {
   return linhas.join('\n').trim();
 }
 
-export { gerarResumoEstoque, gerarListaPlanaEstoque, formatarEstoqueWhatsApp, gerarSaudacao, formatarPedidosCliente, formatarEntregasPendentes, formatarPedidosAbertos };
+/**
+ * Resumo executivo de histórico de pedidos para o WhatsApp.
+ * Conciso: 1 linha por pedido (SEM itens) + totalizador financeiro.
+ * Formato: [✅|❌] #ID — Cliente — R$ Valor
+ */
+function formatarHistoricoPedidos(pedidos, cancelados) {
+  const brl = v => Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  if (!pedidos || pedidos.length === 0) {
+    return cancelados
+      ? '✅ Nenhum pedido cancelado no histórico recente.'
+      : 'ℹ️ Nenhum pedido pago no histórico recente.';
+  }
+
+  const icone = cancelados ? '❌' : '✅';
+  const titulo = cancelados
+    ? `❌ *Últimos ${pedidos.length} pedidos CANCELADOS*`
+    : `✅ *Últimos ${pedidos.length} pedidos PAGOS*`;
+
+  const linhas = [titulo, ''];
+  let total = 0;
+  for (const p of pedidos) {
+    total += Number(p.valor_total) || 0;
+    linhas.push(`${icone} #${String(p.numero_pedido).padStart(3, '0')} — ${p.cliente_nome || 'Cliente'} — R$ ${brl(p.valor_total)}`);
+  }
+  linhas.push('');
+  linhas.push(`💰 *Total do Lote: R$ ${brl(total)}*`);
+  return linhas.join('\n');
+}
+
+export { gerarResumoEstoque, gerarListaPlanaEstoque, formatarEstoqueWhatsApp, gerarSaudacao, formatarPedidosCliente, formatarEntregasPendentes, formatarPedidosAbertos, formatarHistoricoPedidos };

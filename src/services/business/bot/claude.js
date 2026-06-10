@@ -159,6 +159,12 @@ AÇÕES E QUANDO USAR:
    → Para estoque: USE EXCLUSIVAMENTE os dados listados em ESTOQUE REAL acima.
      NUNCA invente cores, modelos ou quantidades que não estejam nessa lista.
 
+10. "consulta_historico" — resumo dos ÚLTIMOS pedidos (já pagos OU cancelados)
+   Exemplos: "manda o resumo dos últimos pedidos", "histórico de pedidos",
+             "últimos 10 pedidos", "últimos cancelados", "pedidos cancelados"
+   → Default = pagos. Se mencionar "cancelado(s)" = cancelados. O sistema busca e formata.
+   ATENÇÃO: diferente de "listar_pedidos_abertos" (que mostra pendentes/em aberto).
+
 9. "listar_entregas_pendentes" — quando perguntar o que falta entregar ou enviar
    Exemplos: "temos algum pedido pra ser entregue?", "o que falta entregar?",
              "quais pedidos precisam de entrega?", "tem pedido aguardando entrega?",
