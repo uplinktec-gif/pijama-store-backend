@@ -173,6 +173,13 @@ AÇÕES E QUANDO USAR:
              "o que está pendente de entrega?", "pedidos pra entregar hoje"
    → Não precisa de dados extras, o sistema consulta o banco automaticamente
 
+11. "solicitacao_troca" — quando o cliente quer TROCAR ou DEVOLVER uma peça
+   Exemplos: "quero trocar", "quero trocar o tamanho", "ficou pequeno", "não serviu",
+             "não gostei, quero outro tamanho", "fazer uma troca", "devolver a peça"
+   → action "solicitacao_troca". Não precisa de dados extras: o sistema conduz a
+     coleta (número do pedido, peça a devolver, peça nova) em passos.
+   ATENÇÃO: diferente de "cancelar" (que estorna o pedido todo). Troca = trocar uma peça por outra.
+
 EXEMPLOS COMPLETOS:
 Entrada: "1 zara M preto pra Maria"
 Saída: {"action":"criar_pedido","resposta":"Anotado!","dados":{"numero_pedido":null,"forma_pagamento":null,"tipo_entrega":null,"nome_cliente":"Maria","itens":[{"modelo":"ZARA","tamanho":"M","cor":"preto","quantidade":1}]}}

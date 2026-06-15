@@ -157,6 +157,92 @@ export async function liberarEstoque(modelo, tamanho, cor, quantidade) {
 }
 
 /**
+ * TROCA DE MERCADORIA — logística reversa, operação ATÔMICA.
+ *
+ * Numa única transação:
+ *   1) Subtrai (-1) a peça NOVA do total (sai para o cliente), guardada contra
+ *      oversell via changes() — se não houver saldo, lança e NADA é alterado.
+ *   2) Soma (+1) a peça ANTIGA de volta ao total (retorna ao estoque).
+ *   3) Grava DUAS linhas no log_estoque (motivo "Troca de Cliente") para auditoria.
+ *
+ * Tudo-ou-nada: se a peça nova não tiver saldo, a devolução também é desfeita.
+ *
+ * @param {number} idPedido número do pedido de referência (rastreabilidade)
+ * @param {{modelo,tamanho,cor,qtd?}} itemAntigo peça que VOLTA ao estoque
+ * @param {{modelo,tamanho,cor,qtd?}} itemNovo   peça que SAI para o cliente
+ * @returns {Promise<{success:boolean, error?:string, skuAntigo?:string, skuNovo?:string, corNova?:string}>}
+ */
+export async function processarTroca(idPedido, itemAntigo, itemNovo) {
+  try {
+    if (!itemAntigo?.modelo || !itemNovo?.modelo) {
+      return { success: false, error: 'Itens da troca incompletos' };
+    }
+    const qtdAntigo = parseInt(itemAntigo.qtd, 10) || 1;
+    const qtdNovo = parseInt(itemNovo.qtd, 10) || 1;
+
+    // Resolve os itens reais (LIKE fallback para a cor) — a peça nova PRECISA existir
+    const novoReal = await findByModeloTamanhoCor(itemNovo.modelo, itemNovo.tamanho, itemNovo.cor);
+    if (!novoReal) {
+      return { success: false, error: `Peça nova não encontrada: ${itemNovo.modelo} ${itemNovo.tamanho} ${itemNovo.cor}` };
+    }
+    const antigoReal = await findByModeloTamanhoCor(itemAntigo.modelo, itemAntigo.tamanho, itemAntigo.cor);
+    const skuNovo = novoReal.sku;
+    const skuAntigo = antigoReal?.sku || generateSKU(itemAntigo.modelo, itemAntigo.tamanho, itemAntigo.cor);
+    const now = new Date().toISOString();
+
+    transaction(() => {
+      // 1) Peça NOVA SAI (-1 do total) — guardada contra oversell
+      run(
+        `UPDATE estoque
+            SET quantidade_total     = quantidade_total - ?,
+                quantidade_disponivel = (quantidade_total - ?) - quantidade_reservada,
+                data_atualizacao = ?,
+                updated_at = ?
+          WHERE sku = ?
+            AND (quantidade_total - quantidade_reservada) >= ?`,
+        [qtdNovo, qtdNovo, now, now, skuNovo, qtdNovo]
+      );
+      const okNovo = queryOne('SELECT changes() as n')?.n ?? 0;
+      if (okNovo === 0) {
+        throw new Error(`Estoque insuficiente para ${novoReal.modelo} ${novoReal.tamanho} ${novoReal.cor}`);
+      }
+
+      // 2) Peça ANTIGA VOLTA (+1 no total). Se o SKU não existir no estoque, o
+      //    UPDATE não altera linha alguma — o log abaixo ainda registra o retorno.
+      run(
+        `UPDATE estoque
+            SET quantidade_total     = quantidade_total + ?,
+                quantidade_disponivel = (quantidade_total + ?) - quantidade_reservada,
+                data_atualizacao = ?,
+                updated_at = ?
+          WHERE sku = ?`,
+        [qtdAntigo, qtdAntigo, now, now, skuAntigo]
+      );
+
+      // 3) Auditoria: duas linhas no log_estoque (saída da nova, retorno da antiga)
+      run(
+        `INSERT INTO log_estoque (data_hora, sku, modelo, tamanho, cor, quantidade, motivo, observacao, usuario)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [now, skuNovo, novoReal.modelo, novoReal.tamanho, novoReal.cor, -qtdNovo,
+         'Troca de Cliente', `Troca pedido #${idPedido}: saída da peça nova`, 'bot-troca']
+      );
+      run(
+        `INSERT INTO log_estoque (data_hora, sku, modelo, tamanho, cor, quantidade, motivo, observacao, usuario)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [now, skuAntigo, itemAntigo.modelo, itemAntigo.tamanho, itemAntigo.cor, qtdAntigo,
+         'Troca de Cliente', `Troca pedido #${idPedido}: retorno da peça antiga`, 'bot-troca']
+      );
+    });
+
+    logger.info(`[estoque] TROCA pedido #${idPedido}: +${qtdAntigo} ${skuAntigo} / -${qtdNovo} ${skuNovo}`);
+    return { success: true, skuAntigo, skuNovo, corNova: novoReal.cor };
+  } catch (error) {
+    logger.error('[sqlite:estoque] processarTroca:', error.message);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
  * Atualiza quantidade total de um item
  */
 export async function atualizarQuantidadeTotal(modelo, tamanho, cor, novaQuantidade) {

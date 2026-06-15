@@ -83,8 +83,34 @@ async function notificarClienteEntrega(numeroPedido, tipoEntrega) {
   logger.info(`[notificar] Cliente ${pedido.cliente_whatsapp} notificado — entrega #${numeroPedido}`);
 }
 
+/**
+ * Alerta o admin (WhatsApp) sobre uma TROCA registrada.
+ * Troca envolve frete + logística reversa física → o dono precisa providenciar
+ * a etiqueta de envio. Usa o mesmo canal dos demais alertas internos (numeroFelipe).
+ */
+async function notificarAdminTroca({ numeroPedido, itemAntigo, itemNovo, clienteWhatsApp }) {
+  const numeroAdmin = env.numeroFelipe;
+  if (!numeroAdmin) {
+    logger.warn('[notificar] numeroFelipe não configurado — alerta de troca não enviado');
+    return;
+  }
+  const fmt = i => `${i?.qtd || 1}x ${i?.modelo} ${i?.tamanho} ${i?.cor}`;
+  const msg = [
+    `🔄 *TROCA PENDENTE — pedido #${numeroPedido}*`,
+    ``,
+    `↩️ Devolvendo: *${fmt(itemAntigo)}*`,
+    `📦 Novo item:  *${fmt(itemNovo)}*`,
+    clienteWhatsApp ? `📱 Cliente: ${clienteWhatsApp}` : '',
+    ``,
+    `⚠️ Requer logística reversa — providencie a *etiqueta de envio* e o frete.`
+  ].filter(Boolean).join('\n');
+
+  await enviarMensagem(numeroAdmin, msg);
+  logger.info(`[notificar] Admin alertado — troca pendente do pedido #${numeroPedido}`);
+}
+
 // ---------------------------------------------------------------------------
 // Exports
 // ---------------------------------------------------------------------------
 
-export { notificarClientePagamento, notificarClienteSaindo, notificarClienteEntrega };
+export { notificarClientePagamento, notificarClienteSaindo, notificarClienteEntrega, notificarAdminTroca };
