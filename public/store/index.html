@@ -663,6 +663,11 @@ const PRODUCTS = [
   { id:'MIA',    nome:'Conjunto Pijama Alcinha',  sub:'Mia',     preco:0, precoOld:0, tag:'NOVO',        tagClass:'tag-novo',         desc:'Conjunto com blusa de alcinha e shorts. Fresco, delicado e perfeito para o verão.' },
   { id:'LIVIA',  nome:'Camisola Americana',       sub:'Lívia',   preco:0, precoOld:0, tag:'NOVO',        tagClass:'tag-novo',         desc:'Camisola americana midi com alças finas ajustáveis. Elegância e conforto em uma peça só.' },
   { id:'BEATRIZ',nome:'Conjunto Feminino',        sub:'Beatriz', preco:0, precoOld:0, tag:'NOVO',        tagClass:'tag-novo',         desc:'Short e blusa de alcinha com tecido leve e fresco. Conforto e estilo para noites quentes.' },
+  { id:'BIA',     nome:'Conjunto Feminino',       sub:'Bia',     preco:0, precoOld:0, tag:'NOVO',      tagClass:'tag-novo', desc:'Conjunto feminino em tecido macio e confortável. Disponível em Pink, Preto e Colors.' },
+  { id:'LUIZA',   nome:'Conjunto Xadrez',         sub:'Luiza',   preco:0, precoOld:0, tag:'NOVO',      tagClass:'tag-novo', desc:'Conjunto feminino em estampa xadrez, tecido macio e aconchegante.' },
+  { id:'MATHEUS', nome:'Pijama Masculino Xadrez', sub:'Matheus', preco:0, precoOld:0, tag:'MASCULINO', tagClass:'tag-novo', desc:'Pijama masculino em estampa xadrez. Tecido macio e confortável para as noites.' },
+  { id:'LIZZIE',  nome:'Pijama Infantil',         sub:'Lizzie',  preco:0, precoOld:0, tag:'INFANTIL',  tagClass:'tag-novo', desc:'Pijama infantil macio e confortável. Tamanhos por idade (4 a 10 anos). Cores Preto, Pink e Colors.' },
+  { id:'INFANTIL',nome:'Pijama Infantil Xadrez',  sub:'Infantil',preco:0, precoOld:0, tag:'INFANTIL',  tagClass:'tag-novo', desc:'Pijama infantil em estampa xadrez. Tamanhos por idade (6 a 10 anos).' },
 ];
 
 /**
@@ -703,9 +708,12 @@ function modeloEsgotado(productId) {
   return total === 0;
 }
 
+// Placeholder "foto em breve" para modelos ainda sem fotos cadastradas
+const PLACEHOLDER_IMG = 'data:image/svg+xml;utf8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="400" height="500"><rect width="400" height="500" fill="#f3ece6"/><text x="200" y="238" font-family="Georgia,serif" font-size="28" fill="#b08d6a" text-anchor="middle">Pluma</text><text x="200" y="276" font-family="Arial,sans-serif" font-size="15" fill="#a8a29e" text-anchor="middle">Foto em breve</text></svg>');
+
 function getDefaultImg(id) {
   const cores = PRODUCT_CORES[id];
-  if (!cores) return '';
+  if (!cores) return PLACEHOLDER_IMG;
   // Usa cor de capa definida, senão bordô, senão preto, senão azul, senão primeira
   const prefer = [COVER_COR[id], 'bordô', 'preto', 'azul', 'azul marinho'];
   for (const c of prefer) {
@@ -735,7 +743,8 @@ function validateProductPhotos() {
 // Planilha usa NÚBIA e LÍVIA (com acento), nosso id não
 const STOCK_KEY = {
   LIA:'LIA', MIA:'MIA', NUBIA:'NÚBIA', ANNE:'ANNE',
-  LIVIA:'LÍVIA', ZARA:'ZARA', BEATRIZ:'BEATRIZ', LUNA:'LUNA'
+  LIVIA:'LÍVIA', ZARA:'ZARA', BEATRIZ:'BEATRIZ', LUNA:'LUNA',
+  BIA:'BIA', LUIZA:'LUIZA', MATHEUS:'MATHEUS', LIZZIE:'LIZZIE', INFANTIL:'INFANTIL'
 };
 
 // Mapeamento: cor do estoque (lowercase) → nome da pasta no Google Drive
@@ -750,6 +759,11 @@ const STOCK_TO_DRIVE = {
   ZARA:    { 'azul':'marinho',      'bordô':'bordô', 'preto':'preto',          'cinza':'cinza', 'chocolate':null },
   BEATRIZ: { 'preto':'preto', 'azul':'azul marinho', 'bordô':null, 'cinza':'cinza com rosa', 'ameixa':'ameixa', 'fúcsia':'fúcsia', 'chocolate':null },
   LUNA:    { 'azul':'azul', 'bordô':'bordô', 'cinza':'cinza', 'preto':'preto', 'chocolate':'chocolate' },
+  BIA:     { 'pink':null, 'preto':null, 'colors':null },
+  LUIZA:   { 'xadrez':null },
+  MATHEUS: { 'xadrez':null },
+  LIZZIE:  { 'preto':null, 'pink':null, 'colors':null },
+  INFANTIL:{ 'xadrez':null },
 };
 
 // Resolve o stockData corretamente para um produto
@@ -946,8 +960,13 @@ function closeProductModal() {
 function renderSizeOptions(modelId) {
   const container = document.getElementById('pm-sizes');
   const modelStock = getModelStock(modelId);
-  const sizes = ['P','M','G','GG'];
   const hasStockData = Object.keys(modelStock).length > 0;
+
+  // Tamanhos derivados do estoque real (suporta adulto P/M/G/GG e infantil 04/06/08/10)
+  const ORDER = ['P','M','G','GG','04','06','08','10'];
+  let sizes = [...new Set(Object.keys(modelStock).map(k => k.split('|')[0]))]
+    .sort((a,b) => (ORDER.indexOf(a)<0?99:ORDER.indexOf(a)) - (ORDER.indexOf(b)<0?99:ORDER.indexOf(b)));
+  if (!sizes.length) sizes = ['P','M','G','GG'];
 
   container.innerHTML = sizes.map(sz => {
     // SKU virtual: tamanho disponível somente se existir combinação com a cor atual.
@@ -999,7 +1018,8 @@ function renderColorOptions(modelId) {
     'preto':'#1a1a1a', 'azul':'#2563eb', 'azul marinho':'#0d1b4b',
     'azul jeans':'#3a6ea8', 'bordô':'#7b1e2a', 'cinza':'#8a8a8a',
     'chocolate':'#5c3317', 'bege':'#d4b896', 'verde':'#2d6a4f', 'ameixa':'#6b21a8',
-    'fúcsia':'#db2777', 'azul geada':'#93c5fd'
+    'fúcsia':'#db2777', 'azul geada':'#93c5fd',
+    'pink':'#ec4899', 'verde mint':'#3eb489', 'colors':'#a855f7', 'xadrez':'#9b2d30'
   };
 
   container.innerHTML = coresParaMostrar.map(({ cor: corEstoque, disponivel }) => {
