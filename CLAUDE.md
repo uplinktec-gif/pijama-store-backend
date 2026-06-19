@@ -121,10 +121,12 @@ WhatsApp → Evolution API → POST /api/webhook/whatsapp
 
 ## Negócio
 
-- Loja de pijamas femininos em Boa Vista - RR — **Pluma Pijamas**
+- Loja de pijamas (feminino, masculino e infantil) em Boa Vista - RR — **Pluma Pijamas**
 - **Donos**: Felipe (ADMIN) e Pluma (OPERADOR) · **Equipe**: Júlly (OPERADOR)
-- **Modelos**: ZARA, MIA, LIA, NÚBIA, LÍVIA, BEATRIZ, ANNE, **LUNA**
-- **Tamanhos**: P, M, G, GG · **Cores**: azul, preto, bordô, cinza, marrom (+ variações como "azul jeans")
+- **Modelos femininos (adulto)**: ZARA, MIA, LIA, NÚBIA, LÍVIA, BEATRIZ, ANNE, LUNA, BIA, LUIZA
+- **Masculino (adulto)**: MATHEUS · **Infantil (por idade)**: LIZZIE, INFANTIL
+- **Tamanhos**: adulto P, M, G, GG · infantil **04, 06, 08, 10** (= anos)
+- **Cores/estampas**: Azul, Azul Jeans, Preto, Bordô, Cinza, Chocolate, Verde mint, Pink, Colors, Xadrez
 - **PIX**: plumabv@gmail.com (JULLY PRISCILA ESCORCIO ROSENDO / CLOUDWALK IP LTDA)
 - **Cartão**: `https://linknabio.gg/plumapijamas`
 - **Frete**: R$ 10,00 (entrega) · R$ 0 (retirada na loja)

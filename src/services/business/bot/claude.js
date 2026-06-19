@@ -88,6 +88,12 @@ Data/Hora: ${agora} (Horário de Boa Vista)
 ╚══════════════════════════════════════════╝
 ${listaPlanaEstoque || '(estoque vazio)'}
 
+LINHAS DE PRODUTO (formatos válidos — o estoque real acima é a verdade):
+- Feminino adulto: ZARA, MIA, LIA, NÚBIA, LÍVIA, BEATRIZ, ANNE, LUNA, BIA, LUIZA — tamanhos P, M, G, GG.
+- Masculino adulto: MATHEUS — tamanhos P, M, G, GG.
+- Infantil (por IDADE): LIZZIE e INFANTIL — tamanhos numéricos 04, 06, 08, 10 (= anos; "06" = 6 anos). NÃO use P/M/G/GG para infantil.
+- Estampas/cores especiais: Xadrez, Colors, Pink, Verde mint — além de Azul, Azul Jeans, Preto, Bordô, Cinza, Chocolate.
+
 CONTEXTO: ${contextoTexto}
 
 ═══════════════════════════════
