@@ -22,6 +22,7 @@ import { gerarResumoEstoque, gerarListaPlanaEstoque, formatarEstoqueWhatsApp, ge
 import { notificarClientePagamento, notificarClienteSaindo, notificarClienteEntrega } from './notificacoes.js';
 import { salvarHistorico } from './historico.js';
 import { iniciarBaixa, continuarBaixa } from './baixaTexto.js';
+import { iniciarTroca, continuarTroca } from './troca.js';
 
 /**
  * Consulta genérica de preço: preço BASE do modelo × quantidade.
@@ -140,6 +141,15 @@ async function processarMensagemComContexto(mensagem, clienteWhatsApp) {
       return { success: true, resposta: r.resposta, tipo: 'BAIXA_TEXTO' };
     }
 
+    // 🔄 TROCA DE MERCADORIA — continuação de fluxo pendente (mesma prioridade da baixa:
+    // "sim"/"não"/peça/nº do pedido são respostas do fluxo, não comandos novos).
+    if (contexto.troca_pendente) {
+      const r = await continuarTroca(mensagem, clienteWhatsApp, contexto);
+      await sheetConversas.salvarContexto(clienteWhatsApp, r.contexto).catch(() => {});
+      logger.info(`[troca] continuação (${contexto.troca_pendente.fase}) em ${Date.now() - inicio}ms`);
+      return { success: true, resposta: r.resposta, tipo: 'TROCA' };
+    }
+
     // ⚡ FAST-PATH: Verificar se conseguimos responder sem Claude
     const fp = fastPath(mensagem, contexto);
     if (fp) {
@@ -184,6 +194,14 @@ async function processarMensagemComContexto(mensagem, clienteWhatsApp) {
         if (r.contexto) await sheetConversas.salvarContexto(clienteWhatsApp, r.contexto).catch(() => {});
         logger.info(`[FastPath] Baixa iniciada em ${Date.now() - inicio}ms`);
         return { success: true, resposta: r.resposta, tipo: 'BAIXA_TEXTO' };
+      }
+
+      // 🔄 Solicitação de troca — inicia fluxo (pedido → peça antiga → peça nova → confirmação)
+      if (fp.action === 'iniciar_troca') {
+        const r = await iniciarTroca(mensagem, clienteWhatsApp, contexto);
+        if (r.contexto) await sheetConversas.salvarContexto(clienteWhatsApp, r.contexto).catch(() => {});
+        logger.info(`[FastPath] Troca iniciada em ${Date.now() - inicio}ms`);
+        return { success: true, resposta: r.resposta, tipo: 'TROCA' };
       }
 
       // ⭐ RETIRADA INTERNA (bypass de faturamento) — consumo dos sócios.
@@ -758,6 +776,12 @@ async function processarMensagemComContexto(mensagem, clienteWhatsApp) {
           logger.error('[listar_entregas_pendentes] Erro:', err.message);
           return { success: false, resposta: 'Erro ao consultar entregas pendentes. Tenta de novo?', tipo: 'LISTAR_ENTREGAS' };
         }
+      }
+
+      case 'solicitacao_troca': {
+        const r = await iniciarTroca(mensagem, clienteWhatsApp, contexto);
+        if (r.contexto) await sheetConversas.salvarContexto(clienteWhatsApp, r.contexto).catch(() => {});
+        return { success: true, resposta: r.resposta, tipo: 'TROCA' };
       }
 
       default: {

@@ -88,6 +88,12 @@ Data/Hora: ${agora} (Horário de Boa Vista)
 ╚══════════════════════════════════════════╝
 ${listaPlanaEstoque || '(estoque vazio)'}
 
+LINHAS DE PRODUTO (formatos válidos — o estoque real acima é a verdade):
+- Feminino adulto: ZARA, MIA, LIA, NÚBIA, LÍVIA, BEATRIZ, ANNE, LUNA, BIA, LUIZA — tamanhos P, M, G, GG.
+- Masculino adulto: MATHEUS — tamanhos P, M, G, GG.
+- Infantil (por IDADE): LIZZIE e INFANTIL — tamanhos numéricos 04, 06, 08, 10 (= anos; "06" = 6 anos). NÃO use P/M/G/GG para infantil.
+- Estampas/cores especiais: Xadrez, Colors, Pink, Verde mint — além de Azul, Azul Jeans, Preto, Bordô, Cinza, Chocolate.
+
 CONTEXTO: ${contextoTexto}
 
 ═══════════════════════════════
@@ -172,6 +178,13 @@ AÇÕES E QUANDO USAR:
              "quais pedidos precisam de entrega?", "tem pedido aguardando entrega?",
              "o que está pendente de entrega?", "pedidos pra entregar hoje"
    → Não precisa de dados extras, o sistema consulta o banco automaticamente
+
+11. "solicitacao_troca" — quando o cliente quer TROCAR ou DEVOLVER uma peça
+   Exemplos: "quero trocar", "quero trocar o tamanho", "ficou pequeno", "não serviu",
+             "não gostei, quero outro tamanho", "fazer uma troca", "devolver a peça"
+   → action "solicitacao_troca". Não precisa de dados extras: o sistema conduz a
+     coleta (número do pedido, peça a devolver, peça nova) em passos.
+   ATENÇÃO: diferente de "cancelar" (que estorna o pedido todo). Troca = trocar uma peça por outra.
 
 EXEMPLOS COMPLETOS:
 Entrada: "1 zara M preto pra Maria"

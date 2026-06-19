@@ -54,6 +54,16 @@ const FAST_PATH_RULES = [
     action: 'baixa_texto'
   },
 
+  // ⭐ SOLICITAÇÃO DE TROCA (logística reversa) — cliente quer trocar/devolver peça.
+  // Vem DEPOIS da baixa (que começa com "baixa/tira") para "baixa por troca" cair na baixa.
+  // "quero trocar", "fazer uma troca", "ficou pequeno", "não serviu", "outro tamanho", "devolução"
+  {
+    // Palavras inteiras ancoradas com \b individual; prefixos (pequen/grand/...) SEM \b
+    // final (senão "ficou pequeno" não casa, pois "pequen" é seguido de "o").
+    regex: /(?:\bquero\s+trocar\b|\bfazer\s+(?:uma\s+)?troca\b|\bsolicitar\s+(?:uma\s+)?troca\b|\btrocar\b|\btroca\s+de\s+(?:tamanho|cor|pe[çc]a|produto)\b|\bdevolver\b|\bdevolu[çc][ãa]o|ficou\s+(?:pequen|grand|apertad|larg|justo)|n[ãa]o\s+serviu|n[ãa]o\s+coube|n[ãa]o\s+gostei|quer(?:o|ia)\s+outro\s+tamanho)/i,
+    action: 'iniciar_troca'
+  },
+
   // ⭐ CANCELAR PEDIDO — "cancelar pedido #16", "cancela o pedido 16"
   {
     regex: /cancela(?:r)?\s+(?:o\s+)?pedido\s+#?(\d+)/i,
@@ -175,6 +185,7 @@ function ehComando(mensagem) {
     || /\bpedidos?\b/.test(t)
     || /^(oi|ola|olá|hey|menu|ajuda|opa|bom dia|boa tarde|boa noite)/.test(t)
     || /^(retirad|retirar|baixa|baixar|tira|tirar|saiu|cancela|pag[oa]|paga|entregue|retirou|reposi|estoque|alerta|quanto|pre[çc]o|todos|hist[óo]rico|resumo|[úu]ltimos?)/.test(t)
+    || /\b(troca|trocar|devolv)/.test(t) // "quero trocar", "devolver" → solicitação de troca, não endereço
     || /^\d+\s+\S+\s+(p|m|g|gg)\b/i.test(t); // "1 anne p ..." → parece pedido/retirada
 }
 
