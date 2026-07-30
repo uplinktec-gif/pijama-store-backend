@@ -585,11 +585,26 @@ async function carregarFotos() {
     const res = await fetch('/api/store/fotos');
     const data = await res.json();
     if (data.ok && data.fotos) {
-      // O banco completa modelos ainda ausentes no catálogo local.
-      // Mantém o fallback dos modelos antigos, pois há registros legados
-      // com IDs concatenados que ainda precisam ser saneados no banco.
+      // O banco complementa o fallback por cor. Ignora registros legados
+      // malformados para que uma cor ruim não derrube as fotos do modelo todo.
       for (const [modelo, cores] of Object.entries(data.fotos)) {
-        if (!PRODUCT_CORES[modelo]) PRODUCT_CORES[modelo] = cores;
+        const coresValidas = Object.fromEntries(
+          Object.entries(cores).filter(([, ids]) =>
+            Array.isArray(ids) &&
+            ids.length > 0 &&
+            ids.every(id =>
+              typeof id === 'string' && (
+                /^https?:\/\//.test(id) ||
+                id.startsWith('/') ||
+                /^[A-Za-z0-9_-]{20,80}$/.test(id)
+              )
+            )
+          )
+        );
+        PRODUCT_CORES[modelo] = {
+          ...(PRODUCT_CORES[modelo] || {}),
+          ...coresValidas,
+        };
       }
     }
   } catch (e) { console.warn('[fotos] erro:', e); }
@@ -758,19 +773,19 @@ const STOCK_KEY = {
 // Chaves em MINÚSCULAS para lookup case-insensitive
 // null = sem foto ainda → exibe swatch de cor sólida como fallback
 const STOCK_TO_DRIVE = {
-  LIA:     { 'azul':'azul marinho', 'bordô':'bordô', 'preto':'preto com bege', 'cinza':null, 'chocolate':null },
+  LIA:     { 'azul':'azul marinho', 'azul jeans':'azul jeans', 'bordô':'bordô', 'preto':'preto com bege', 'cinza':null, 'chocolate':'chocolate', 'verde mint':'verde mint' },
   MIA:     { 'azul':'azul',          'bordô':'bordô', 'preto':'preto',          'cinza':'cinza com rosa', 'chocolate':null },
-  NUBIA:   { 'azul':'azul marinho', 'bordô':'bordô', 'preto':'preto com bege', 'cinza':null, 'chocolate':null, 'azul jeans':null },
+  NUBIA:   { 'azul':'azul marinho', 'bordô':'bordô', 'preto':'preto com bege', 'cinza':null, 'chocolate':null, 'azul jeans':'azul jeans', 'verde mint':'verde mint' },
   ANNE:    { 'azul':'azul',         'bordô':'bordô', 'cinza':'cinza',          'preto':'preto', 'chocolate':null },
   LIVIA:   { 'azul':'azul marinho', 'preto':'preto', 'cinza':'cinza',          'bordô':null, 'chocolate':'chocolate' },
   ZARA:    { 'azul':'marinho',      'bordô':'bordô', 'preto':'preto',          'cinza':'cinza', 'chocolate':null },
   BEATRIZ: { 'preto':'preto', 'azul':'azul marinho', 'bordô':null, 'cinza':'cinza com rosa', 'ameixa':'ameixa', 'fúcsia':'fúcsia', 'chocolate':null },
   LUNA:    { 'azul':'azul', 'bordô':'bordô', 'cinza':'cinza', 'preto':'preto', 'chocolate':'chocolate' },
-  BIA:     { 'pink':'pink', 'preto':null, 'colors':null },
-  LUIZA:   { 'xadrez':null },
-  MATHEUS: { 'xadrez':null },
-  LIZZIE:  { 'preto':null, 'pink':'pink', 'colors':null },
-  INFANTIL:{ 'xadrez':null },
+  BIA:     { 'pink':'pink', 'preto':'preto', 'colors':'colors' },
+  LUIZA:   { 'xadrez':'xadrez' },
+  MATHEUS: { 'xadrez':'xadrez' },
+  LIZZIE:  { 'preto':'preto', 'pink':'pink', 'colors':'colors' },
+  INFANTIL:{ 'xadrez':'xadrez' },
 };
 
 // Resolve o stockData corretamente para um produto
