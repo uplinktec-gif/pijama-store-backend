@@ -584,7 +584,14 @@ async function carregarFotos() {
   try {
     const res = await fetch('/api/store/fotos');
     const data = await res.json();
-    if (data.ok && data.fotos) { PRODUCT_CORES = data.fotos; }
+    if (data.ok && data.fotos) {
+      // O banco completa modelos ainda ausentes no catálogo local.
+      // Mantém o fallback dos modelos antigos, pois há registros legados
+      // com IDs concatenados que ainda precisam ser saneados no banco.
+      for (const [modelo, cores] of Object.entries(data.fotos)) {
+        if (!PRODUCT_CORES[modelo]) PRODUCT_CORES[modelo] = cores;
+      }
+    }
   } catch (e) { console.warn('[fotos] erro:', e); }
 }
 
@@ -799,8 +806,9 @@ let pixData = null;
    INIT
    ========================================================= */
 document.addEventListener('DOMContentLoaded', async () => {
-  // Carrega preços ANTES de renderizar — evita exibir R$ 0,00 momentaneamente
-  await loadStock();
+  // Carrega fotos, preços e estoque ANTES de renderizar os cards.
+  // Sem isso, o grid usa apenas o fallback antigo e ignora fotos cadastradas no banco.
+  await Promise.all([carregarFotos(), loadStock()]);
   renderProductGrid();
   updateCartUI();
 });
